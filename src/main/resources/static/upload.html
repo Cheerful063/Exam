@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上传题库文件</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .card { background: white; border-radius: 20px; padding: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h1 { text-align: center; color: #333; margin-bottom: 30px; font-size: 28px; }
+        
+        .tabs { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; }
+        .tab { padding: 12px 30px; border: none; border-radius: 25px; cursor: pointer; font-size: 16px; transition: all 0.3s; }
+        .tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .tab.inactive { background: #f0f0f0; color: #333; }
+        
+        .upload-area { border: 3px dashed #ddd; border-radius: 15px; padding: 50px 30px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 25px; }
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area.dragover { border-color: #667eea; background: #f0f4ff; }
+        .upload-icon { font-size: 48px; margin-bottom: 15px; }
+        .upload-text { color: #333; font-size: 18px; margin-bottom: 8px; }
+        .upload-hint { color: #666; font-size: 14px; }
+        #fileInput { display: none; }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
+        .form-input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; outline: none; transition: all 0.3s; }
+        .form-input:focus { border-color: #667eea; }
+        .form-textarea { width: 100%; min-height: 100px; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; resize: vertical; outline: none; transition: all 0.3s; }
+        .form-textarea:focus { border-color: #667eea; }
+        
+        select.form-input { cursor: pointer; }
+        
+        .image-preview { max-width: 100%; height: auto; border-radius: 10px; margin-top: 10px; display: none; }
+        .image-preview.show { display: block; }
+        
+        .btn-group { display: flex; gap: 15px; justify-content: center; }
+        .btn { padding: 14px 35px; border: none; border-radius: 50px; font-size: 16px; cursor: pointer; transition: all 0.3s; text-decoration: none; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-secondary { background: #f0f0f0; color: #333; }
+        .btn-danger { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
+        .btn:hover { transform: translateY(-2px); }
+        
+        .result { margin-top: 25px; padding: 20px; border-radius: 12px; display: none; }
+        .result.success { background: #d4edda; color: #155724; }
+        .result.error { background: #f8d7da; color: #721c24; }
+        .result.show { display: block; white-space: pre-line; line-height: 1.7; }
+        
+        .file-info { background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 20px; display: none; }
+        .file-info.show { display: block; }
+        .file-name { font-weight: bold; color: #333; }
+        
+        .option-fields { display: none; }
+        .option-fields.show { display: block; }
+        
+        .question-types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+        .question-type { padding: 12px; border: 2px solid #ddd; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.3s; }
+        .question-type:hover { border-color: #667eea; }
+        .question-type.selected { border-color: #667eea; background: #eef2ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>📤 上传题库</h1>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('file')">文件上传</button>
+                <button class="tab inactive" onclick="switchTab('manual')">手动添加</button>
+            </div>
+            
+            <!-- 文件上传 -->
+            <div id="fileTab">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">点击或拖拽文件到此处</div>
+                    <div class="upload-hint">支持 PDF、Word(docx)、图片(jpg/png) 格式</div>
+                </div>
+                <input type="file" id="fileInput" accept=".pdf,.docx,.jpg,.jpeg,.png">
+                
+                <div class="file-info" id="fileInfo">
+                    <span class="file-name" id="fileName"></span>
+                </div>
+    
+                <label style="display:flex;align-items:center;gap:10px;margin:16px 0 4px;color:#333;font-size:15px;">
+                    <input type="checkbox" id="replaceMode" style="width:18px;height:18px;cursor:pointer;">
+                    覆盖导入（先清空现有题库与答题记录，适合题库重复/题型混乱时重来一次）
+                </label>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="uploadBtn">开始上传</button>
+                    <button class="btn" id="previewBtn" style="background:#17a2b8;color:white;">仅试解析</button>
+                    <button class="btn btn-danger" id="clearBtn" onclick="clearQuestions()">清空题目</button>
+                    <a href="index.html" class="btn btn-secondary">返回首页</a>
+                </div>
+            </div>
+            
+            <!-- 手动添加 -->
+            <div id="manualTab" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">题目类型</label>
+                    <div class="question-types">
+                        <div class="question-type" data-type="single" onclick="selectQuestionType('single')">单选题</div>
+                        <div class="question-type" data-type="multiple" onclick="selectQuestionType('multiple')">多选题</div>
+                        <div class="question-type" data-type="judge" onclick="selectQuestionType('judge')">判断题</div>
+                        <div class="question-type" data-type="fill" onclick="selectQuestionType('fill')">填空题</div>
+                        <div class="question-type" data-type="essay" onclick="selectQuestionType('essay')">简答题</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">题目内容</label>
+                    <textarea class="form-textarea" id="questionContent" placeholder="请输入题目内容..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">或上传题目图片（支持包含表格的题目）</label>
+                    <input type="file" id="imageInput" accept=".jpg,.jpeg,.png" onchange="previewImage()">
+                    <img id="imagePreview" class="image-preview" alt="图片预览">
+                </div>
+                
+                <div class="option-fields" id="optionFields">
+                    <div class="form-group">
+                        <label class="form-label">选项 A</label>
+                        <input type="text" class="form-input" id="optionA" placeholder="请输入选项A">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">选项 B</label>
+                        <input type="text" class="form-input" id="optionB" placeholder="请输入选项B">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">选项 C</label>
+                        <input type="text" class="form-input" id="optionC" placeholder="请输入选项C">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">选项 D</label>
+                        <input type="text" class="form-input" id="optionD" placeholder="请输入选项D">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">正确答案</label>
+                    <input type="text" class="form-input" id="correctAnswer" placeholder="请输入正确答案">
+                    <small style="color: #666;">判断题请输入：对/错；选择题请输入：A/B/C/D；填空题和简答题请输入具体答案</small>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="addQuestionBtn">添加题目</button>
+                    <button class="btn btn-danger" onclick="clearQuestions()">清空题目</button>
+                    <a href="index.html" class="btn btn-secondary">返回首页</a>
+                </div>
+            </div>
+    
+            <div class="result" id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // 同源部署：页面与接口在同一个 Spring Boot 服务下，跟随实际主机/端口
+        const API_BASE = '';
+        let selectedQuestionType = 'single';
+
+        function switchTab(tab) {
+            const fileTab = document.getElementById('fileTab');
+            const manualTab = document.getElementById('manualTab');
+            const fileBtn = document.querySelector('.tab:nth-child(1)');
+            const manualBtn = document.querySelector('.tab:nth-child(2)');
+            
+            if (tab === 'file') {
+                fileTab.style.display = 'block';
+                manualTab.style.display = 'none';
+                fileBtn.classList.remove('inactive');
+                fileBtn.classList.add('active');
+                manualBtn.classList.remove('active');
+                manualBtn.classList.add('inactive');
+            } else {
+                fileTab.style.display = 'none';
+                manualTab.style.display = 'block';
+                fileBtn.classList.remove('active');
+                fileBtn.classList.add('inactive');
+                manualBtn.classList.remove('inactive');
+                manualBtn.classList.add('active');
+            }
+        }
+
+        function selectQuestionType(type) {
+            selectedQuestionType = type;
+            document.querySelectorAll('.question-type').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.querySelector(`.question-type[data-type="${type}"]`).classList.add('selected');
+            
+            const optionFields = document.getElementById('optionFields');
+            if (type === 'single' || type === 'multiple') {
+                optionFields.classList.add('show');
+            } else {
+                optionFields.classList.remove('show');
+            }
+        }
+
+        function previewImage() {
+            const input = document.getElementById('imageInput');
+            const preview = document.getElementById('imagePreview');
+            
+            if (input.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    preview.src = e.target.result;
+                    preview.classList.add('show');
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        // 文件上传相关
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const result = document.getElementById('result');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        let selectedFile = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileInfo.classList.add('show');
+            result.classList.remove('show');
+        }
+
+        uploadBtn.addEventListener('click', () => {
+            if (!selectedFile) {
+                showResult(false, '请先选择文件');
+                return;
+            }
+
+            const replaceMode = document.getElementById('replaceMode').checked;
+            if (replaceMode && !confirm('覆盖导入会先删除现有全部题目和答题记录，确定继续吗？')) {
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('replace', replaceMode ? 'true' : 'false');
+
+            result.textContent = '上传中...';
+            result.className = 'result show';
+
+            fetch(`${API_BASE}/api/upload`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    let msg = `✅ ${data.message}`;
+                    if (data.types) {
+                        const names = { single: '单选', multiple: '多选', judge: '判断', fill: '填空', essay: '简答' };
+                        msg += '\n题型分布：' + Object.entries(data.types)
+                            .map(([k, v]) => `${names[k] || k} ${v}`).join(' / ');
+                    }
+                    if (data.skipped) {
+                        msg += `\n已自动跳过 ${data.skipped} 道与题库重复的题目`;
+                    }
+                    if (data.warnings) {
+                        msg += '\n⚠️ 需要人工检查：' + data.warnings;
+                    }
+                    showResult(true, msg);
+                    selectedFile = null;
+                    fileInput.value = '';
+                    fileInfo.classList.remove('show');
+                } else {
+                    showResult(false, '❌ ' + data.message);
+                }
+            })
+            .catch(err => {
+                showResult(false, '❌ 上传失败：' + err.message);
+            });
+        });
+
+        // 仅试解析：不写库，先看能解析出多少题
+        document.getElementById('previewBtn').addEventListener('click', () => {
+            if (!selectedFile) {
+                showResult(false, '请先选择文件');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            result.textContent = '解析中...';
+            result.className = 'result show';
+
+            fetch(`${API_BASE}/api/upload/preview`, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    showResult(false, '❌ ' + data.message);
+                    return;
+                }
+                const names = { single: '单选', multiple: '多选', judge: '判断', fill: '填空', essay: '简答' };
+                let msg = `🔍 试解析完成：共 ${data.parsed} 道题（尚未写入题库）`;
+                if (data.types) {
+                    msg += '\n题型分布：' + Object.entries(data.types).map(([k, v]) => `${names[k] || k} ${v}`).join(' / ');
+                }
+                if (data.warnings) {
+                    msg += '\n⚠️ 需人工检查：' + data.warnings;
+                }
+                showResult(true, msg);
+            })
+            .catch(err => showResult(false, '❌ 解析失败：' + err.message));
+        });
+
+        // 手动添加题目
+        document.getElementById('addQuestionBtn').addEventListener('click', () => {
+            const content = document.getElementById('questionContent').value.trim();
+            const imageFile = document.getElementById('imageInput').files[0];
+            const correctAnswer = document.getElementById('correctAnswer').value.trim();
+            
+            if (!content && !imageFile) {
+                showResult(false, '请输入题目内容或上传题目图片');
+                return;
+            }
+            
+            if (!correctAnswer) {
+                showResult(false, '请输入正确答案');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('questionType', selectedQuestionType);
+            formData.append('correctAnswer', correctAnswer);
+            
+            if (content) {
+                formData.append('content', content);
+            }
+            
+            if (imageFile) {
+                formData.append('file', imageFile);
+            }
+            
+            if (selectedQuestionType === 'single' || selectedQuestionType === 'multiple') {
+                const optionA = document.getElementById('optionA').value.trim();
+                const optionB = document.getElementById('optionB').value.trim();
+                const optionC = document.getElementById('optionC').value.trim();
+                const optionD = document.getElementById('optionD').value.trim();
+                
+                if (!optionA || !optionB) {
+                    showResult(false, '选择题至少需要填写选项A和B');
+                    return;
+                }
+                
+                formData.append('optionA', optionA);
+                formData.append('optionB', optionB);
+                if (optionC) formData.append('optionC', optionC);
+                if (optionD) formData.append('optionD', optionD);
+            }
+
+            result.textContent = '添加中...';
+            result.className = 'result show';
+
+            fetch(`${API_BASE}/api/upload/manual`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('服务器返回错误: ' + res.status);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data && data.success) {
+                    showResult(true, '✅ 题目添加成功！');
+                    document.getElementById('questionContent').value = '';
+                    document.getElementById('imageInput').value = '';
+                    document.getElementById('imagePreview').classList.remove('show');
+                    document.getElementById('correctAnswer').value = '';
+                    document.getElementById('optionA').value = '';
+                    document.getElementById('optionB').value = '';
+                    document.getElementById('optionC').value = '';
+                    document.getElementById('optionD').value = '';
+                } else {
+                    showResult(false, '❌ ' + (data && data.message ? data.message : '添加失败'));
+                }
+            })
+            .catch(err => {
+                showResult(false, '❌ 添加失败：' + (err.message || '未知错误'));
+            });
+        });
+
+        function clearQuestions() {
+            const confirmed = confirm('⚠️ 确定要清空所有题目信息吗？\n\n此操作会删除所有题目、题库和答题记录，且不可恢复！');
+            
+            if (confirmed !== true) {
+                console.log('用户取消清空操作');
+                return;
+            }
+            
+            console.log('开始清空题目...');
+            result.textContent = '清空中...';
+            result.className = 'result show';
+            
+            fetch(`${API_BASE}/api/questions/clear`, {
+                method: 'DELETE'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.success) {
+                    showResult(true, '✅ ' + data.message);
+                    selectedFile = null;
+                    fileInput.value = '';
+                    fileInfo.classList.remove('show');
+                } else {
+                    showResult(false, '❌ ' + (data && data.message ? data.message : '清空失败'));
+                }
+            })
+            .catch(err => {
+                showResult(false, '❌ 清空失败：' + (err.message || '未知错误'));
+            });
+        }
+
+        function showResult(success, message) {
+            result.textContent = message;
+            result.className = 'result ' + (success ? 'success' : 'error') + ' show';
+        }
+    </script>
+</body>
+</html>

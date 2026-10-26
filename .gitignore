@@ -1,0 +1,25 @@
+# 编译产物
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+
+# 本地私密配置（数据库账号密码），不要提交
+application-local.yml
+
+# 运行时上传的图片
+uploads/*
+!uploads/.gitkeep
+
+# 日志
+*.log
+logs/
+
+# 本地开发辅助文件
+.workbuddy/
