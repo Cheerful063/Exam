@@ -1,7 +1,11 @@
 package com.example.questionbank.util;
 
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -16,8 +20,12 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 文件 -> 纯文本 -> 题目 的入口。
@@ -33,6 +41,26 @@ public class FileParserUtil {
 
     /** 可选的 OCR 开关（扫描版 PDF / 图片）；找不到语言包时自动跳过 */
     private static volatile boolean ocrAvailable = true;
+
+    @org.springframework.beans.factory.annotation.Value("${file.upload-dir:./uploads/}")
+    private String uploadDir;
+
+    /** PDF 解析结果：纯文本 + 内嵌图片（已保存到磁盘） */
+    public static class PdfImage {
+        public final int pageIndex;   // 0-based
+        public final String url;      // 访问路径，如 /uploads/pdfimg/xxx.png
+
+        public PdfImage(int pageIndex, String url) {
+            this.pageIndex = pageIndex;
+            this.url = url;
+        }
+    }
+
+    public static class PdfParseResult {
+        public String text;
+        public final List<String> pageTexts = new ArrayList<>();
+        public final List<PdfImage> images = new ArrayList<>();
+    }
 
     public String parseFile(MultipartFile file) throws IOException {
         String filename = file.getOriginalFilename();
@@ -54,22 +82,88 @@ public class FileParserUtil {
      * 对于没有文本层的扫描件，退回 OCR。
      */
     public String parsePdf(byte[] bytes) throws IOException {
+        return parsePdfDetailed(bytes).text;
+    }
+
+    /**
+     * 带图片提取的 PDF 解析：
+     * 1. 逐页抽取文本（保持 sortByPosition，页与页之间互不干扰）；
+     * 2. 提取每页的内嵌位图（题库里的效果图 / 代码截图），保存到 uploads/pdfimg/ 下；
+     * 3. 文本层缺失时回退 OCR（此时无图片关联）。
+     */
+    public PdfParseResult parsePdfDetailed(byte[] bytes) throws IOException {
+        PdfParseResult result = new PdfParseResult();
         try (PDDocument document = Loader.loadPDF(bytes)) {
             PDFTextStripper stripper = new PDFTextStripper();
             stripper.setSortByPosition(true);      // 关键：按页面坐标排序，恢复阅读顺序
             stripper.setLineSeparator("\n");
             stripper.setAddMoreFormatting(false);
             stripper.setSuppressDuplicateOverlappingText(true);
-            String text = stripper.getText(document);
+
+            StringBuilder all = new StringBuilder();
+            int pages = document.getNumberOfPages();
+            for (int i = 0; i < pages; i++) {
+                stripper.setStartPage(i + 1);
+                stripper.setEndPage(i + 1);
+                String pageText = stripper.getText(document);
+                result.pageTexts.add(pageText);
+                if (i > 0) {
+                    all.append('\n');
+                }
+                all.append(pageText);
+            }
+            String text = all.toString();
 
             if (looksLikeScanned(text)) {
                 String ocr = ocrDocument(document);
                 if (ocr != null && !ocr.isBlank()) {
-                    return ocr;
+                    result.text = ocr;
+                    return result;
                 }
                 throw new IOException("该 PDF 为扫描件且未识别出文字，请安装 Tesseract 中文语言包（chi_sim）后重试");
             }
-            return text;
+            result.text = text;
+            extractEmbeddedImages(document, result);
+            return result;
+        }
+    }
+
+    /** 提取 PDF 每页的内嵌位图，保存为 PNG 并记录访问 URL（同一张图跨页复用只存一次） */
+    private void extractEmbeddedImages(PDDocument document, PdfParseResult result) {
+        Path dir;
+        try {
+            String configured = uploadDir == null || uploadDir.isBlank() ? "./uploads/" : uploadDir;
+            String cleanUploadDir = configured.replace("./", "").replace(".\\", "");
+            dir = Paths.get(System.getProperty("user.dir"), cleanUploadDir, "pdfimg").normalize();
+            Files.createDirectories(dir);
+        } catch (IOException e) {
+            System.err.println("创建图片目录失败，跳过 PDF 图片提取: " + e.getMessage());
+            return;
+        }
+
+        int pageIndex = 0;
+        for (PDPage page : document.getPages()) {
+            PDResources resources = page.getResources();
+            if (resources != null) {
+                for (COSName name : resources.getXObjectNames()) {
+                    try {
+                        if (!(resources.getXObject(name) instanceof PDImageXObject image)) {
+                            continue;
+                        }
+                        // 过滤过小的图（装饰性图标/透明蒙版）
+                        if (image.getWidth() < 50 || image.getHeight() < 20) {
+                            continue;
+                        }
+                        BufferedImage buffered = image.getImage();
+                        String filename = UUID.randomUUID().toString().replace("-", "") + ".png";
+                        javax.imageio.ImageIO.write(buffered, "png", dir.resolve(filename).toFile());
+                        result.images.add(new PdfImage(pageIndex, "/uploads/pdfimg/" + filename));
+                    } catch (Exception e) {
+                        System.err.println("提取 PDF 内嵌图片失败（已跳过）: " + e.getMessage());
+                    }
+                }
+            }
+            pageIndex++;
         }
     }
 

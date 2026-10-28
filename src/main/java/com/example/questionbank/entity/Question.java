@@ -34,6 +34,9 @@ public class Question {
 
     private String analysis;
 
+    /** PDF 内嵌图片 URL，多个用英文逗号分隔 */
+    private String images;
+
     private String questionType;
 
     private Long sourceFileId;

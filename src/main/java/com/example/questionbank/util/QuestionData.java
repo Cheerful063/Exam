@@ -1,6 +1,8 @@
 package com.example.questionbank.util;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,6 +22,28 @@ public class QuestionData {
     private String analysis;
     /** single / multiple / judge / fill / essay */
     private String questionType;
+    /** PDF 内嵌图片（如填空题的效果图），保存后的访问 URL 列表 */
+    private final List<String> imageUrls = new ArrayList<>();
+    /** 所属题型小节名（单选题/判断题...），仅解析期使用 */
+    private String sectionType;
+
+    public String getSectionType() {
+        return sectionType;
+    }
+
+    public void setSectionType(String sectionType) {
+        this.sectionType = sectionType;
+    }
+
+    public List<String> getImageUrls() {
+        return imageUrls;
+    }
+
+    public void addImageUrl(String url) {
+        if (url != null && !url.isEmpty()) {
+            imageUrls.add(url);
+        }
+    }
 
     public Integer getNumber() {
         return number;

@@ -20,28 +20,31 @@ import java.util.regex.Pattern;
  */
 public final class QuestionParser {
 
-    /** 题号：1、 1． （中文顿号 / 全角句点） */
+    /** 题号：1、1．（中文顿号 / 全角句点） */
     private static final Pattern QNUM_CN = Pattern.compile("^(\\d{1,3})\\s*[、．]\\s*(.*)$");
-    /** 题号：1. （半角句点，仅当与上一题号连续时才认，避免把 "1." 列表项当成题） */
+    /** 题号：1.（半角句点，仅当与上一题号连续（或小节重新从 1 开始）时才认） */
     private static final Pattern QNUM_ASCII = Pattern.compile("^(\\d{1,3})\\.\\s*(.*)$");
     /** 题号被排版到行尾： "在网页中显示图像的HTML标签是 664、" */
     private static final Pattern QNUM_TAIL = Pattern.compile("^(.*\\S)\\s+(\\d{1,3})\\s*[、．]\\s*$");
 
     private static final Pattern OPTION = Pattern.compile("^([A-H])\\s*[、．]\\s*(.*)$");
-    private static final Pattern INLINE_OPTION = Pattern.compile("(?:^|\\s)([A-H])\\s*[、．]\\s*");
+    /** 行内多选项标记：'A、1.B、2.C、3.D、0.' / 'B、type: 2.C、type: square'。
+     *  不加前置约束，靠「字母连续成序列 + 起始位置」判定，避免空格漏抽导致拆不开。 */
+    private static final Pattern INLINE_OPTION = Pattern.compile("([A-H])\\s*[、．.]");
 
     private static final Pattern ANSWER_LINE =
-            Pattern.compile("^[【\\[(（]?\\s*(?:答案|正确答案|参考答案|标准答案)\\s*[】\\])）]?\\s*[：:]\\s*(.*)$");
+            Pattern.compile("^[【\\[(（]?\\s*(?:答案|正确答案|参考答案|标准答案)\\s*[】\\])）]?\\s*[：:]\\s*(.*)$"
+                    + "|^[【\\[(（]?\\s*(?:正确答案|参考答案|标准答案)\\s*[】\\])）]?\\s*$");
     private static final Pattern ANALYSIS_LINE =
             Pattern.compile("^[【\\[(（]?\\s*(?:解析|分析|答案解析|答案分析|试题解析)\\s*[】\\])）]?\\s*[：:]\\s*(.*)$");
     /** 行内答案（题干与答案被排到同一行） */
     private static final Pattern ANSWER_INLINE =
             Pattern.compile("[【\\[(（]?\\s*(?:答案|正确答案|参考答案)\\s*[】\\])）]?\\s*[：:]\\s*(.*)$");
 
-    /** 题型标题行，如 "一、单选题"、"（二）判断题" */
+    /** 题型标题行，如 "一、单选题"、"（二）判断题"；捕获组 1 = 题型名 */
     private static final Pattern TYPE_HEADER = Pattern.compile(
             "^\\s*(?:第?[一二三四五六七八九十]+|[（(][一二三四五六七八九十]+[）)]|\\d{1,2})\\s*[、．.)）]?\\s*"
-                    + "(?:单项选择题|单选题|多项选择题|多选题|不定项选择题|判断题|填空题|简答题|问答题|论述题|程序设计题|综合题|选择题)"
+                    + "(单项选择题|单选题|多项选择题|多选题|不定项选择题|判断题|填空题|简答题|问答题|论述题|程序设计题|综合题|选择题)"
                     + "\\s*$");
 
     private static final Pattern PAGE_NUM_LINE = Pattern.compile("^[-—–－\\s]*\\d{1,3}[-—–－\\s]*$");
@@ -128,6 +131,10 @@ public final class QuestionParser {
             }
 
             boolean handled = text1.isEmpty() || handleLine(ctx, text1, title);
+            if (!handled && ctx.cur != null) {
+                // 粘连题号：上一题答案/题干末尾粘着下一题的题号（期望题号精确匹配）
+                handled = trySplitGluedQuestion(ctx, text1);
+            }
             if (!handled) {
                 handlePlainText(ctx, text1);
             }
@@ -172,6 +179,7 @@ public final class QuestionParser {
         final List<QuestionData> collected = new ArrayList<>();
         QuestionData cur;
         String mode = "idle";          // idle | stem | afterAnswer | analysis
+        String sectionType;            // 当前题型小节名（单选题 / 多选题 / 判断题 / 填空题...）
         String lastOption;
         boolean answerEmpty;
         int lastNumber;
@@ -190,6 +198,7 @@ public final class QuestionParser {
         void start(String content, Integer number) {
             cur = new QuestionData();
             cur.setNumber(number);
+            cur.setSectionType(sectionType);
             String c = trimToNull(content);
             if (c != null) {
                 cur.setContent(c);
@@ -200,12 +209,75 @@ public final class QuestionParser {
         }
     }
 
+    /** 尝试按期望题号切分「上一题末尾 + 下一题题号」的粘连行，成功返回 true */
+    private static boolean trySplitGluedQuestion(Ctx ctx, String line) {
+        int expect = ctx.lastNumber + 1;
+        if (expect < 2 || expect > 999) {
+            return false;
+        }
+        Matcher m = Pattern.compile("(?<=[.。？?！!；;，,）)\\s])" + expect + "\\s*[、．.]\\s*(?=[A-Za-z\\u4e00-\\u9fa5<\\u201c\\u2018])")
+                .matcher(line);
+        if (!m.find()) {
+            return false;
+        }
+        String head = line.substring(0, m.start()).trim();
+        String rest = line.substring(m.end()).trim();
+        if (rest.isEmpty()) {
+            return false;
+        }
+        if (!head.isEmpty()) {
+            if ("afterAnswer".equals(ctx.mode) || "analysis".equals(ctx.mode)) {
+                ctx.cur.setAnalysis(joinText(ctx.cur.getAnalysis(), head));
+            } else {
+                ctx.cur.setContent(joinText(ctx.cur.getContent(), head));
+            }
+        }
+        ctx.finish();
+        ctx.lastNumber = expect;
+        ctx.start(rest, expect);
+        return true;
+    }
+
+    /**
+     * 当前题是否处于“孤儿解析”状态：已作答、有解析，而解析实为缺题号新题的题干。
+     * 此时一旦再出现答案信号（答案行/裸判断词/选项行），就应把解析提升为新题。
+     */
+    private static boolean isOrphanAnalysis(Ctx ctx) {
+        return "analysis".equals(ctx.mode)
+                && ctx.cur.getCorrectAnswer() != null && !ctx.cur.getCorrectAnswer().isEmpty()
+                && ctx.cur.getAnalysis() != null && !ctx.cur.getAnalysis().isEmpty();
+    }
+
+    /** 把孤儿解析提升为缺题号的新题（仅在 isOrphanAnalysis 为真时调用） */
+    private static void promoteOrphanAnalysis(Ctx ctx) {
+        if (!isOrphanAnalysis(ctx)) {
+            return;
+        }
+        String stem = ctx.cur.getAnalysis();
+        ctx.finish();
+        ctx.start(stem, null);
+    }
+
     /** 处理结构化行，返回是否已消费该行 */
     private static boolean handleLine(Ctx ctx, String line, String title) {
         // 题型标题
-        if (TYPE_HEADER.matcher(line).matches()) {
+        Matcher mType = TYPE_HEADER.matcher(line);
+        if (mType.matches()) {
             ctx.finish();
+            ctx.sectionType = mType.group(1);
             ctx.mode = "idle";
+            return true;
+        }
+
+        // 判断题：题干下一行直接是 正确/错误，没有“正确答案：”前缀（如蓝桥杯判断题）
+        if (ctx.cur != null
+                && ("stem".equals(ctx.mode) || isOrphanAnalysis(ctx))
+                && ctx.sectionType != null && ctx.sectionType.contains("判断")
+                && JUDGE_WORD.matcher(line).matches()) {
+            promoteOrphanAnalysis(ctx);
+            ctx.cur.setCorrectAnswer(normalizeJudge(line));
+            ctx.answerEmpty = false;
+            ctx.mode = "afterAnswer";
             return true;
         }
 
@@ -215,7 +287,9 @@ public final class QuestionParser {
             if (ctx.cur == null) {
                 return true;
             }
-            String value = mAns.group(1).trim();
+            // 已答完的题又来了答案行，说明之前的“解析”是缺题号新题的题干
+            promoteOrphanAnalysis(ctx);
+            String value = mAns.group(1) == null ? "" : mAns.group(1).trim();
             if (value.isEmpty()) {
                 ctx.answerEmpty = true;
             } else {
@@ -257,28 +331,18 @@ public final class QuestionParser {
             return true;
         }
 
-        // 半角句点题号：仅在题号连续时生效
+        // 半角句点题号：题号连续时生效；题型小节切换后允许重新从 1 开始
         Matcher mAscii = QNUM_ASCII.matcher(line);
-        if (mAscii.matches() && parseInt(mAscii.group(1)) == ctx.lastNumber + 1) {
+        int asciiNum = mAscii.matches() ? parseInt(mAscii.group(1)) : -1;
+        if (mAscii.matches() && (asciiNum == ctx.lastNumber + 1 || asciiNum == 1)) {
             ctx.finish();
-            int n = parseInt(mAscii.group(1));
-            ctx.lastNumber = n;
-            ctx.start(mAscii.group(2), n);
+            ctx.lastNumber = asciiNum;
+            ctx.start(mAscii.group(2), asciiNum);
             return true;
         }
 
-        // 一行多个选项
-        List<String[]> inline = splitInlineOptions(line);
-        if (inline != null) {
-            if (ctx.cur == null) {
-                ctx.start(null, null);
-            }
-            for (String[] pair : inline) {
-                ctx.cur.putOption(pair[0], pair[1]);
-            }
-            ctx.lastOption = inline.get(inline.size() - 1)[0];
-            ctx.mode = "stem";
-            ctx.answerEmpty = false;
+        // 一行多个选项（严格：从 A 起连续成序列；宽松：承接上一题最后一个选项的下一字母）
+        if (splitInlineOptions(ctx, line)) {
             return true;
         }
 
@@ -289,9 +353,17 @@ public final class QuestionParser {
                 ctx.start(null, null);
             }
             if ("analysis".equals(ctx.mode)) {
-                // 说明上一题的“解析”其实是缺题号的新题干
-                ctx.cur.setContent(joinText(ctx.cur.getContent(), ctx.cur.getAnalysis()));
-                ctx.cur.setAnalysis(null);
+                boolean answered = ctx.cur.getCorrectAnswer() != null && !ctx.cur.getCorrectAnswer().isEmpty();
+                if (answered) {
+                    // 上一题已答完：这段“解析”其实是缺题号的新题干，开新题
+                    String stem = ctx.cur.getAnalysis();
+                    ctx.finish();
+                    ctx.start(stem, null);
+                } else {
+                    // 未答完时的解析其实是题干的一部分（排版错位）
+                    ctx.cur.setContent(joinText(ctx.cur.getContent(), ctx.cur.getAnalysis()));
+                    ctx.cur.setAnalysis(null);
+                }
             }
             ctx.cur.putOption(mOpt.group(1), mOpt.group(2).trim());
             ctx.lastOption = mOpt.group(1);
@@ -303,15 +375,16 @@ public final class QuestionParser {
         return false;
     }
 
-    /** 普通文本：可能是题干续行、选项续行、答案续行，或一道缺题号的新题 */
+    /** 普通文本：可能是题干续行、选项续行、答案续行或解析 */
     private static void handlePlainText(Ctx ctx, String line) {
         if ("afterAnswer".equals(ctx.mode) && ctx.cur != null) {
             if (ctx.answerEmpty) {
                 // 答案写在 "答案：" 之后的多行（代码或长句答案）
                 ctx.cur.setCorrectAnswer(joinText(ctx.cur.getCorrectAnswer(), line));
             } else {
-                ctx.finish();
-                ctx.start(line, null);
+                // 答案之后、下一题题号之前的说明文字 → 解析
+                ctx.cur.setAnalysis(joinText(ctx.cur.getAnalysis(), line));
+                ctx.mode = "analysis";
             }
             return;
         }
@@ -336,8 +409,13 @@ public final class QuestionParser {
         String answer = q.getCorrectAnswer() == null ? "" : q.getCorrectAnswer().trim();
         Map<String, String> opts = q.getOptions();
 
+        boolean sectionIsChoice = q.getSectionType() != null
+                && (q.getSectionType().contains("选择") || q.getSectionType().contains("单选")
+                    || q.getSectionType().contains("多选"));
         boolean judgeOptions = opts.size() == 2
-                && isJudgeWord(opts.get("A")) && isJudgeWord(opts.get("B"));
+                && isJudgeWord(opts.get("A")) && isJudgeWord(opts.get("B"))
+                // 题型小节明确是选择类时，尊重小节（如“单选题”里出现 正确/错误 两选项仍是单选）
+                && !sectionIsChoice;
 
         if (judgeOptions) {
             // 选项只有“正确/错误”两项，等价于判断题，答案可能是字母也可能是文字
@@ -356,7 +434,8 @@ public final class QuestionParser {
 
         if (!opts.isEmpty()) {
             String letters = answer.toUpperCase(Locale.ROOT).replaceAll("[^A-H]", "");
-            boolean allLetters = !letters.isEmpty() && letters.length() == answer.length();
+            boolean allLetters = !letters.isEmpty()
+                    && letters.length() == answer.replaceAll("\\s", "").length();
             q.setQuestionType(allLetters && letters.length() >= 2 ? "multiple" : "single");
             return;
         }
@@ -443,8 +522,13 @@ public final class QuestionParser {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
     }
 
-    /** "A、01 B、02 C、03" 这类同一行多选项的拆分 */
-    private static List<String[]> splitInlineOptions(String line) {
+    /**
+     * 同一行多选项拆分。
+     * 严格模式：'A、1.B、2.C、3.D、0.' —— A 开头、字母连续成序列；
+     * 宽松模式：'B、type: 2.C、type: square' —— 承接上一行最后一个选项的下一字母
+     * （PDF 抽取时选项前的空格丢失导致两行粘成一行），首个标记前的残留文本并回上一选项。
+     */
+    private static boolean splitInlineOptions(Ctx ctx, String line) {
         List<int[]> marks = new ArrayList<>();
         List<String> letters = new ArrayList<>();
         Matcher m = INLINE_OPTION.matcher(line);
@@ -452,15 +536,53 @@ public final class QuestionParser {
             marks.add(new int[]{m.start(), m.end()});
             letters.add(m.group(1));
         }
-        if (marks.size() < 2 || !"A".equals(letters.get(0)) || marks.get(0)[0] > 2) {
-            return null;
+        if (marks.size() < 2) {
+            return false;
         }
-        List<String[]> out = new ArrayList<>();
+
+        boolean strict = "A".equals(letters.get(0)) && marks.get(0)[0] <= 1 && isConsecutive(letters, 'A');
+        boolean loose = false;
+        if (!strict && ctx.cur != null && ctx.lastOption != null && "stem".equals(ctx.mode)
+                && marks.get(0)[0] <= 1) {
+            char next = (char) (ctx.lastOption.charAt(0) + 1);
+            loose = letters.get(0).charAt(0) == next && isConsecutive(letters, next);
+        }
+        if (!strict && !loose) {
+            return false;
+        }
+
+        if (ctx.cur == null) {
+            ctx.start(null, null);
+        }
+        if (loose && marks.get(0)[0] > 0) {
+            String prev = ctx.cur.getOption(ctx.lastOption);
+            ctx.cur.putOption(ctx.lastOption, joinText(prev, line.substring(0, marks.get(0)[0]).trim()));
+        }
         for (int i = 0; i < marks.size(); i++) {
             int end = i + 1 < marks.size() ? marks.get(i + 1)[0] : line.length();
-            out.add(new String[]{letters.get(i), line.substring(marks.get(i)[1], end).trim()});
+            ctx.cur.putOption(letters.get(i), line.substring(marks.get(i)[1], end).trim());
         }
-        return out;
+        ctx.lastOption = letters.get(letters.size() - 1);
+        ctx.mode = "stem";
+        ctx.answerEmpty = false;
+        return true;
+    }
+
+    /** 字母序列是否从 from 开始连续（如 A,B,C） */
+    private static boolean isConsecutive(List<String> letters, char from) {
+        for (String s : letters) {
+            if (s.charAt(0) != from) {
+                return false;
+            }
+            from++;
+        }
+        return true;
+    }
+
+    private static String normalizeJudge(String s) {
+        String t = s.trim();
+        return (t.contains("错") || "×".equals(t) || "F".equalsIgnoreCase(t) || t.contains("否"))
+                ? "错误" : "正确";
     }
 
     private static int parseInt(String s) {

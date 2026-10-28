@@ -62,9 +62,24 @@ public class FileUploadController {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            String text = fileParserUtil.parseFile(file);
+            String text;
+            List<FileParserUtil.PdfImage> pdfImages = null;
+            List<String> pageTexts = null;
+            if (isPdf(file.getOriginalFilename())) {
+                FileParserUtil.PdfParseResult pdf = fileParserUtil.parsePdfDetailed(file.getBytes());
+                text = pdf.text;
+                pdfImages = pdf.images;
+                pageTexts = pdf.pageTexts;
+            } else {
+                text = fileParserUtil.parseFile(file);
+            }
             QuestionParser.ParseResult parseResult = fileParserUtil.parseQuestions(text);
             List<QuestionData> questions = parseResult.getQuestions();
+
+            // PDF 内嵌图片（效果图）关联到对应题目
+            if (pdfImages != null && !pdfImages.isEmpty()) {
+                attachPdfImages(questions, pageTexts, pdfImages);
+            }
 
             if (questions.isEmpty()) {
                 response.put("success", false);
@@ -147,9 +162,63 @@ public class FileUploadController {
         }
     }
 
+    private boolean isPdf(String filename) {
+        return filename != null && filename.toLowerCase().endsWith(".pdf");
+    }
+
+    /**
+     * 把 PDF 内嵌图片关联到题目：
+     * 题库里的效果图位于某页内，取该页文本中最后出现的题号，在题目列表中
+     * 优先找同号且未分配图片的填空题（效果图几乎都挂在填空/代码题上），否则取同号任一题。
+     */
+    private void attachPdfImages(List<QuestionData> questions, List<String> pageTexts,
+                                 List<FileParserUtil.PdfImage> images) {
+        int lastAssigned = -1;
+        for (FileParserUtil.PdfImage img : images) {
+            if (img.pageIndex < 0 || img.pageIndex >= pageTexts.size()) {
+                continue;
+            }
+            Integer num = lastQuestionNumberIn(pageTexts.get(img.pageIndex));
+            if (num == null) {
+                continue;
+            }
+            QuestionData fillCandidate = null;
+            QuestionData anyCandidate = null;
+            for (int i = lastAssigned + 1; i < questions.size(); i++) {
+                QuestionData q = questions.get(i);
+                if (num.equals(q.getNumber()) && q.getImageUrls().isEmpty()) {
+                    if (fillCandidate == null && "fill".equals(q.getQuestionType())) {
+                        fillCandidate = q;
+                    }
+                    if (anyCandidate == null) {
+                        anyCandidate = q;
+                    }
+                }
+            }
+            QuestionData target = fillCandidate != null ? fillCandidate : anyCandidate;
+            if (target != null) {
+                target.addImageUrl(img.url);
+                lastAssigned = questions.indexOf(target);
+            }
+        }
+    }
+
+    /** 页面文本里最后出现的题号（如 "35.下列..."），没有则返回 null */
+    private Integer lastQuestionNumberIn(String pageText) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?m)^(\\d{1,3})\\s*[、．.]\\s*\\S")
+                .matcher(pageText);
+        Integer last = null;
+        while (m.find()) {
+            last = Integer.parseInt(m.group(1));
+        }
+        return last;
+    }
+
     /** 把解析结果写入实体，返回内容是否有变化 */
     private boolean fillQuestion(Question question, QuestionData qd) {
         String answer = qd.getCorrectAnswer() == null ? "" : qd.getCorrectAnswer();
+        String images = qd.getImageUrls().isEmpty() ? null : String.join(",", qd.getImageUrls());
         boolean changed = !answer.equals(question.getCorrectAnswer() == null ? "" : question.getCorrectAnswer())
                 || !eq(qd.getQuestionType(), question.getQuestionType())
                 || !eq(qd.getOptionA(), question.getOptionA())
@@ -160,6 +229,7 @@ public class FileUploadController {
                 || !eq(qd.getOptionF(), question.getOptionF())
                 || !eq(qd.getOptionG(), question.getOptionG())
                 || !eq(qd.getAnalysis(), question.getAnalysis())
+                || !eq(images, question.getImages())
                 || !eq(qd.getContent(), question.getContent());
 
         question.setContent(qd.getContent());
@@ -172,6 +242,7 @@ public class FileUploadController {
         question.setOptionG(qd.getOptionG());
         question.setCorrectAnswer(answer);
         question.setAnalysis(qd.getAnalysis());
+        question.setImages(images);
         question.setQuestionType(qd.getQuestionType());
         return changed;
     }

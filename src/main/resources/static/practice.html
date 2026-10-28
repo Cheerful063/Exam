@@ -59,7 +59,11 @@
         .sheet-pager button:disabled { opacity: 0.35; cursor: not-allowed; }
         .question-number { color: #667eea; font-weight: bold; font-size: 16px; margin-bottom: 15px; }
         .question-type { color: #764ba2; font-size: 14px; margin-bottom: 10px; font-weight: bold; }
-        .question-content { font-size: 20px; line-height: 1.7; color: #333; margin-bottom: 30px; }
+        .question-content { font-size: 20px; line-height: 1.7; color: #333; margin-bottom: 30px; white-space: pre-wrap; word-break: break-word; }
+        .question-content pre { white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace; background: #f6f8fa; padding: 12px 15px; border-radius: 8px; font-size: 16px; }
+        .question-images { margin-bottom: 20px; }
+        .question-images-toggle { font-size: 14px; color: #666; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .question-images-list img { max-width: 100%; height: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin: 6px 0; display: block; }
         .question-content table { border-collapse: collapse; width: 100%; margin: 15px 0; }
         .question-content table th, .question-content table td { border: 1px solid #ddd; padding: 10px 15px; text-align: left; }
         .question-content table th { background-color: #f5f5f5; font-weight: bold; }
@@ -173,6 +177,13 @@
                 <div class="question-number" id="questionNumber">第 1 题</div>
                 <div class="question-type" id="questionType"></div>
                 <div class="question-content" id="questionContent"></div>
+                <div class="question-images" id="questionImages" style="display:none;">
+                    <label class="question-images-toggle">
+                        <input type="checkbox" id="imagesToggle" checked onchange="toggleQuestionImages()">
+                        显示题目图片（PDF 原图）
+                    </label>
+                    <div class="question-images-list" id="questionImagesList"></div>
+                </div>
                 
                 <!-- 判断题选项 -->
                 <div class="judge-options" id="judgeOptions" style="display: none;">
@@ -512,6 +523,28 @@
             });
         }
 
+        // 渲染 PDF 原图（填空题效果图），带显示开关
+        function renderQuestionImages(question) {
+            const box = document.getElementById('questionImages');
+            const list = document.getElementById('questionImagesList');
+            const urls = String(question.images || '').split(',').map(s => s.trim()).filter(Boolean);
+            if (!urls.length) {
+                box.style.display = 'none';
+                list.innerHTML = '';
+                return;
+            }
+            document.getElementById('imagesToggle').checked = true;
+            list.innerHTML = urls.map(u =>
+                `<img src="${u}" alt="题目图片" loading="lazy" onerror="this.style.display='none'">`
+            ).join('');
+            box.style.display = 'block';
+        }
+
+        function toggleQuestionImages() {
+            const show = document.getElementById('imagesToggle').checked;
+            document.getElementById('questionImagesList').style.display = show ? 'block' : 'none';
+        }
+
         function loadQuestion(index) {
             if (index < 0 || index >= questions.length) return;
 
@@ -529,14 +562,15 @@
             const question = questions[index];
             document.getElementById('questionNumber').textContent = `第 ${index + 1} / ${questions.length} 题`;
             document.getElementById('current').textContent = index + 1;
-            const content = question.content;
-            if (content.includes('http://') || content.includes('https://') || 
-                content.includes('<img') || content.includes('<table') || 
-                content.includes('<tr') || content.includes('<td')) {
-                document.getElementById('questionContent').innerHTML = content;
+            const content = question.content || '';
+            const contentEl = document.getElementById('questionContent');
+            // 仅本站上传的图片题按 HTML 渲染；其余一律转义显示，<img>、<body> 等标签按文字原样展示
+            if (/<img\s[^>]*src=["']\/uploads\//.test(content)) {
+                contentEl.innerHTML = content;
             } else {
-                document.getElementById('questionContent').textContent = content;
+                contentEl.textContent = content;
             }
+            renderQuestionImages(question);
             document.getElementById('questionType').textContent = getQuestionTypeName(question.questionType);
 
             // 隐藏所有输入控件

@@ -67,7 +67,7 @@ public class DatabaseInitConfig implements CommandLineRunner {
         }
     }
 
-    /** 扩展选项列（E/F/G），支持多于四个选项的选择题 */
+    /** 扩展选项列（E/F/G），支持多于四个选项的选择题；以及 PDF 图片列 */
     private void ensureOptionColumns(JdbcTemplate jdbcTemplate) {
         String[] columns = {"option_e", "option_f", "option_g"};
         for (String column : columns) {
@@ -81,6 +81,20 @@ public class DatabaseInitConfig implements CommandLineRunner {
                 jdbcTemplate.execute("ALTER TABLE `question` ADD COLUMN `" + column
                         + "` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL AFTER `option_d`");
             }
+        }
+        ensureImagesColumn(jdbcTemplate);
+    }
+
+    /** PDF 内嵌图片列（存 URL，逗号分隔） */
+    private void ensureImagesColumn(JdbcTemplate jdbcTemplate) {
+        Integer exists = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS " +
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'question' AND COLUMN_NAME = 'images'",
+            Integer.class
+        );
+        if (exists == null || exists == 0) {
+            System.out.println("正在为 question 表添加字段 images ...");
+            jdbcTemplate.execute("ALTER TABLE `question` ADD COLUMN `images` TEXT NULL DEFAULT NULL AFTER `analysis`");
         }
     }
 }
