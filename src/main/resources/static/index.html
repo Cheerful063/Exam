@@ -5,160 +5,208 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>单人刷题软件</title>
     <style>
+        :root {
+            --ink: #111827;
+            --ink-2: #4b5563;
+            --muted: #9ca3af;
+            --line: #eceef3;
+            --brand: #4f46e5;
+            --brand-2: #6366f1;
+            --danger: #dc2626;
+            --surface: #ffffff;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-        .container { max-width: 760px; margin: 0 auto; padding: 48px 20px; }
-        .card { background: white; border-radius: 24px; padding: 44px; box-shadow: 0 20px 60px rgba(0,0,0,0.28); }
-        h1 { text-align: center; color: #2b2d42; margin-bottom: 8px; font-size: 34px; letter-spacing: 1px; }
-        .subtitle { text-align: center; color: #8b8fa3; margin-bottom: 32px; font-size: 15px; }
-
-        /* 统计条 */
-        .stats { display: flex; background: #f6f7fb; border-radius: 16px; padding: 20px 10px; margin-bottom: 26px; }
-        .stat { flex: 1; text-align: center; position: relative; }
-        .stat + .stat::before { content: ''; position: absolute; left: 0; top: 15%; height: 70%; width: 1px; background: #e3e6f0; }
-        .stat-num { font-size: 30px; font-weight: bold; color: #667eea; line-height: 1.2; }
-        .stat-num.warn { color: #f5576c; }
-        .stat-label { font-size: 13px; color: #8b8fa3; margin-top: 4px; }
-
-        /* 功能卡片 2×2 */
-        .actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 9px; }
-        .action {
-            display: flex; align-items: center; gap: 14px;
-            padding: 20px 20px; border-radius: 16px; border: 1.5px solid transparent;
-            text-decoration: none; cursor: pointer; font-family: inherit; text-align: left;
-            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
-            background: #f6f7fb;
+        html, body { height: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', Roboto, Arial, sans-serif;
+            background: #f7f8fc;
+            color: var(--ink);
+            -webkit-font-smoothing: antialiased;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            position: relative;
+            overflow-x: hidden;
         }
-        .action .ico {
-            flex: none; width: 44px; height: 44px; border-radius: 12px;
+        /* 背景：两团极淡的光斑，替代原来的整屏紫色渐变 */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(70px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body::before { width: 460px; height: 460px; background: rgba(99,102,241,.16); top: -140px; left: -120px; }
+        body::after  { width: 420px; height: 420px; background: rgba(236,72,153,.10); bottom: -160px; right: -120px; }
+
+        .shell {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 460px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            padding: 32px 30px 24px;
+            box-shadow: 0 1px 2px rgba(17,24,39,.04), 0 16px 40px rgba(17,24,39,.08);
+        }
+
+        /* 品牌区 */
+        .brand { display: flex; align-items: center; gap: 13px; margin-bottom: 26px; }
+        .logo {
+            width: 42px; height: 42px; flex: none;
+            border-radius: 13px;
+            background: linear-gradient(140deg, var(--brand) 0%, var(--brand-2) 100%);
             display: flex; align-items: center; justify-content: center;
-            font-size: 21px; background: #fff; box-shadow: 0 2px 8px rgba(31,38,135,.08);
+            box-shadow: 0 6px 16px rgba(79,70,229,.28);
         }
-        .action .txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-        .action .t { font-size: 16px; font-weight: 600; color: #2b2d42; display: flex; align-items: center; gap: 8px; }
-        .action .d { font-size: 12.5px; color: #8b8fa3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .action:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(102,126,234,.18); background: #fff; border-color: #dfe3f5; }
-        .action:active { transform: translateY(0); }
+        .logo svg { width: 22px; height: 22px; stroke: #fff; }
+        .brand h1 { font-size: 19px; font-weight: 650; letter-spacing: .2px; line-height: 1.3; }
+        .brand p { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 
-        /* 主操作：开始刷题 */
-        .action.primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            box-shadow: 0 8px 22px rgba(102,126,234,.35);
+        /* 数据条 */
+        .stats {
+            display: flex; align-items: stretch;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #fcfcfe;
+            margin-bottom: 18px;
         }
-        .action.primary .ico { background: rgba(255,255,255,.22); color: #fff; box-shadow: none; }
-        .action.primary .t { color: #fff; }
-        .action.primary .d { color: rgba(255,255,255,.82); }
-        .action.primary:hover { background: linear-gradient(135deg, #5c73e6 0%, #6b4399 100%); border-color: transparent; }
-
-        /* 错题重练：带计数徽标 */
-        .action.wrong { background: #fff5f7; }
-        .action.wrong .ico { color: #f5576c; }
-        .action.wrong:hover { border-color: #ffd3dc; }
-        .badge {
-            display: none; min-width: 22px; height: 20px; padding: 0 6px;
-            border-radius: 10px; background: #f5576c; color: #fff;
-            font-size: 12px; font-weight: 600; line-height: 20px; text-align: center;
+        .stat { flex: 1; padding: 14px 16px; }
+        .stat + .stat { border-left: 1px solid var(--line); }
+        .stat .num {
+            font-size: 25px; font-weight: 650; line-height: 1.15;
+            font-variant-numeric: tabular-nums;
+            color: var(--ink);
         }
-        .badge.show { display: inline-block; }
-        .action.wrong.empty .badge { display: none; }
+        .stat .num.brand { color: var(--brand); }
+        .stat .num.warn  { color: var(--danger); }
+        .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 3px; }
 
-        /* 清空题目：低干扰的次要操作 */
-        .action.danger { background: #fff; border-color: #eceef5; }
-        .action.danger .ico { background: #fdf0f0; color: #d9534f; }
-        .action.danger .t { color: #6b6f80; font-weight: 500; }
-        .action.danger:hover { background: #fff6f6; border-color: #f7c9c9; box-shadow: 0 8px 20px rgba(217,83,79,.12); }
-        .action.danger:hover .t { color: #d9534f; }
+        /* 主操作 */
+        .cta {
+            display: flex; align-items: center; justify-content: space-between;
+            width: 100%; height: 52px; padding: 0 18px;
+            border: none; border-radius: 14px; cursor: pointer;
+            background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+            color: #fff; font-family: inherit; font-size: 15.5px; font-weight: 600;
+            text-decoration: none;
+            box-shadow: 0 8px 20px rgba(79,70,229,.26);
+            transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+            margin-bottom: 12px;
+        }
+        .cta:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(79,70,229,.32); filter: brightness(1.03); }
+        .cta:active { transform: translateY(0); }
+        .cta .left { display: flex; align-items: center; gap: 10px; }
+        .cta svg { width: 18px; height: 18px; stroke: currentColor; }
+        .cta .arrow { opacity: .8; }
 
-        .hint { text-align: center; font-size: 12.5px; color: #a8acbd; margin-bottom: 26px; }
+        /* 次要操作 */
+        .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .tile {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 14px;
+            border: 1px solid var(--line); border-radius: 14px;
+            background: #fff; cursor: pointer; text-decoration: none;
+            font-family: inherit; color: var(--ink-2); font-size: 14px; font-weight: 550;
+            transition: border-color .16s ease, background .16s ease, transform .16s ease;
+        }
+        .tile:hover { border-color: #d9dcf0; background: #fafbff; transform: translateY(-1px); }
+        .tile svg { width: 17px; height: 17px; stroke: var(--brand); flex: none; }
+        .tile .pill {
+            margin-left: auto; min-width: 20px; height: 19px; padding: 0 6px;
+            border-radius: 10px; background: #fee2e2; color: var(--danger);
+            font-size: 11.5px; font-weight: 650; line-height: 19px; text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+        .tile .pill.hide { display: none; }
+        .tile.empty { color: var(--muted); }
+        .tile.empty svg { stroke: var(--muted); }
 
-        /* 特性 */
-        .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding-top: 24px; border-top: 1px solid #f0f1f6; }
-        .feature { text-align: center; padding: 6px; }
-        .feature-icon { font-size: 26px; margin-bottom: 6px; }
-        .feature-title { font-weight: 600; color: #4a4e63; margin-bottom: 3px; font-size: 14px; }
-        .feature-desc { color: #9ba0b1; font-size: 12px; }
+        /* 危险操作 */
+        .footnote { text-align: center; margin-top: 18px; }
+        .link-danger {
+            border: none; background: none; cursor: pointer;
+            font-family: inherit; font-size: 12.5px; color: var(--muted);
+            padding: 6px 10px; border-radius: 8px;
+            transition: color .16s ease, background .16s ease;
+        }
+        .link-danger:hover { color: var(--danger); background: #fff1f1; }
 
-        @media (max-width: 620px) {
-            .container { padding: 24px 14px; }
-            .card { padding: 28px 20px; border-radius: 20px; }
-            h1 { font-size: 27px; }
-            .subtitle { margin-bottom: 24px; font-size: 14px; }
-            .actions { grid-template-columns: 1fr; gap: 12px; }
-            .action { padding: 16px; }
-            .stat-num { font-size: 26px; }
-            .features { gap: 8px; }
-            .feature-icon { font-size: 22px; }
+        .hint { text-align: center; font-size: 12px; color: var(--muted); margin-top: 10px; min-height: 16px; }
+
+        @media (max-width: 430px) {
+            body { padding: 20px 14px; align-items: flex-start; }
+            .shell { padding: 24px 20px 18px; border-radius: 18px; }
+            .brand h1 { font-size: 17.5px; }
+            .stat { padding: 12px 14px; }
+            .stat .num { font-size: 22px; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <h1>📚 单人刷题软件</h1>
-            <p class="subtitle">高效学习，轻松刷题</p>
-
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-num" id="questionCount">0</div>
-                    <div class="stat-label">题库题目</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-num warn" id="wrongCount">0</div>
-                    <div class="stat-label">待攻克错题</div>
-                </div>
+    <main class="shell">
+        <div class="brand">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
             </div>
-
-            <div class="actions">
-                <a href="practice.html" class="action primary">
-                    <span class="ico">✏️</span>
-                    <span class="txt">
-                        <span class="t">开始刷题</span>
-                        <span class="d">从上次进度继续</span>
-                    </span>
-                </a>
-                <a href="practice.html?mode=wrong" class="action wrong" id="wrongBtn">
-                    <span class="ico">🔁</span>
-                    <span class="txt">
-                        <span class="t">错题重练 <span class="badge" id="wrongBadge">0</span></span>
-                        <span class="d">只刷错过的题</span>
-                    </span>
-                </a>
-                <a href="upload.html" class="action">
-                    <span class="ico">📤</span>
-                    <span class="txt">
-                        <span class="t">上传题库</span>
-                        <span class="d">PDF / Word / 图片</span>
-                    </span>
-                </a>
-                <button class="action danger" onclick="clearQuestions()">
-                    <span class="ico">🗑️</span>
-                    <span class="txt">
-                        <span class="t">清空题目</span>
-                        <span class="d">删除全部题库与记录</span>
-                    </span>
-                </button>
-            </div>
-            <p class="hint" id="hint"></p>
-
-            <div class="features">
-                <div class="feature">
-                    <div class="feature-icon">📄</div>
-                    <div class="feature-title">多格式支持</div>
-                    <div class="feature-desc">PDF、Word、图片</div>
-                </div>
-                <div class="feature">
-                    <div class="feature-icon">⚡</div>
-                    <div class="feature-title">智能解析</div>
-                    <div class="feature-desc">自动提取题目答案</div>
-                </div>
-                <div class="feature">
-                    <div class="feature-icon">📊</div>
-                    <div class="feature-title">进度追踪</div>
-                    <div class="feature-desc">记录答题情况</div>
-                </div>
+            <div>
+                <h1>单人刷题</h1>
+                <p>本地题库 · 自动解析 · 错题重练</p>
             </div>
         </div>
-    </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="num brand" id="questionCount">0</div>
+                <div class="lbl">题库题目</div>
+            </div>
+            <div class="stat">
+                <div class="num warn" id="wrongCount">0</div>
+                <div class="lbl">待攻克错题</div>
+            </div>
+        </div>
+
+        <a href="practice.html" class="cta">
+            <span class="left">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>
+                </svg>
+                开始刷题
+            </span>
+            <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
+            </svg>
+        </a>
+
+        <div class="tiles">
+            <a href="practice.html?mode=wrong" class="tile" id="wrongBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>
+                </svg>
+                错题重练
+                <span class="pill hide" id="wrongBadge">0</span>
+            </a>
+            <a href="upload.html" class="tile">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <path d="M7 9l5-5 5 5"/><path d="M12 4v12"/>
+                </svg>
+                上传题库
+            </a>
+        </div>
+
+        <p class="hint" id="hint"></p>
+
+        <div class="footnote">
+            <button class="link-danger" onclick="clearQuestions()">清空题库与记录</button>
+        </div>
+    </main>
 
     <script>
         // 同源部署：页面与接口在同一个 Spring Boot 服务下，跟随实际主机/端口
@@ -170,12 +218,10 @@
                 .then(data => {
                     document.getElementById('questionCount').textContent = data.total || 0;
                 })
-                .catch(err => {
-                    console.log('获取题目数量失败:', err);
-                });
+                .catch(err => console.log('获取题目数量失败:', err));
         }
 
-        // 错题数：错题卡片上挂计数徽标，没有错题时置灰提示
+        // 错题数：只有存在错题时才显示徽标，没有错题时入口置灰
         function loadWrongCount() {
             fetch(`${API_BASE}/api/answers/wrong`)
                 .then(res => res.json())
@@ -186,44 +232,31 @@
                     const card = document.getElementById('wrongBtn');
                     const badge = document.getElementById('wrongBadge');
                     badge.textContent = n;
-                    badge.classList.toggle('show', n > 0);
+                    badge.classList.toggle('hide', n === 0);
                     card.classList.toggle('empty', n === 0);
 
-                    const hint = document.getElementById('hint');
-                    hint.textContent = n === 0
-                        ? '还没有错题，先去刷一轮吧'
-                        : '';
+                    document.getElementById('hint').textContent =
+                        n === 0 ? '还没有错题，先刷一轮吧' : '';
                 })
-                .catch(err => {
-                    console.log('获取错题数量失败:', err);
-                });
+                .catch(err => console.log('获取错题数量失败:', err));
         }
 
         function clearQuestions() {
             const confirmed = confirm('⚠️ 确定要清空所有题目信息吗？\n\n此操作会删除所有题目、题库和答题记录，且不可恢复！');
+            if (confirmed !== true) return;
 
-            if (confirmed !== true) {
-                console.log('用户取消清空操作');
-                return;
-            }
-
-            console.log('开始清空题目...');
-            fetch(`${API_BASE}/api/questions/clear`, {
-                method: 'DELETE'
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.success) {
-                    alert('✅ ' + data.message);
-                    loadQuestionCount();
-                    loadWrongCount();
-                } else {
-                    alert('❌ ' + (data && data.message ? data.message : '清空失败'));
-                }
-            })
-            .catch(err => {
-                alert('❌ 清空失败：' + (err.message || '未知错误'));
-            });
+            fetch(`${API_BASE}/api/questions/clear`, { method: 'DELETE' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.success) {
+                        alert('✅ ' + data.message);
+                        loadQuestionCount();
+                        loadWrongCount();
+                    } else {
+                        alert('❌ ' + (data && data.message ? data.message : '清空失败'));
+                    }
+                })
+                .catch(err => alert('❌ 清空失败：' + (err.message || '未知错误')));
         }
 
         loadQuestionCount();
