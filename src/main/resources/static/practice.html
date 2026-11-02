@@ -1032,10 +1032,12 @@
                 document.getElementById('masteredTip').classList.toggle('show', !!isCorrect);
             }
 
-            // 答对后自动跳下一题，加快刷题节奏；
-            // 但有解析的题目不跳（来不及看解析）；错题重练也不跳（要看清「已掌握」提示）
+            // 答对后自动跳下一题，加快刷题节奏。
+            // 全部模式：有解析的题不跳（来不及看解析）；错题重练：一律 1.5 秒后跳下一道，
+            // 留出时间看清「已掌握」提示。
             const hasAnalysis = !!(analysis && String(analysis).trim());
-            if (isCorrect && !hasAnalysis && mode !== 'wrong') {
+            const autoJump = mode === 'wrong' ? true : !hasAnalysis;
+            if (isCorrect && autoJump) {
                 autoJumpTimer = setTimeout(() => {
                     if (currentIndex < queue.length - 1) {
                         loadQuestion(currentIndex + 1);
@@ -1045,7 +1047,7 @@
                         const next = firstUnansweredInQueue();
                         if (next >= 0) loadQuestion(next);
                     }
-                }, 1000);
+                }, mode === 'wrong' ? 1500 : 1000);
             }
         }
 
