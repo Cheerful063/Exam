@@ -100,10 +100,15 @@ public class FileUploadController {
                         questionBankService.remove(null);
                     }
 
-                    // 已存在的题目：按题干匹配，已存在则修正题型/选项/答案，不重复插入
+                    // 已存在的题目：按「题干 + 选项 + 答案」匹配，完全一致才算重复。
+                    // 只用题干匹配会把「同题干、不同选项/答案」的两道真题合并成一道，导致丢题。
                     Map<String, Question> existing = new HashMap<>();
                     for (Question question : questionService.getAllQuestions()) {
-                        existing.putIfAbsent(normalizeForCompare(question.getContent()), question);
+                        existing.putIfAbsent(
+                                compareKey(question.getContent(), question.getOptionA(), question.getOptionB(),
+                                        question.getOptionC(), question.getOptionD(), question.getOptionE(),
+                                        question.getOptionF(), question.getOptionG(), question.getCorrectAnswer()),
+                                question);
                     }
 
                     QuestionBank bank = new QuestionBank();
@@ -116,7 +121,9 @@ public class FileUploadController {
                     int updated = 0;
                     int skipped = 0;
                     for (QuestionData qd : questions) {
-                        String key = normalizeForCompare(qd.getContent());
+                        String key = compareKey(qd.getContent(), qd.getOptionA(), qd.getOptionB(),
+                                qd.getOptionC(), qd.getOptionD(), qd.getOptionE(),
+                                qd.getOptionF(), qd.getOptionG(), qd.getCorrectAnswer());
                         Question question = existing.get(key);
                         if (question != null) {
                             if (fillQuestion(question, qd)) {
@@ -249,6 +256,18 @@ public class FileUploadController {
 
     private boolean eq(String a, String b) {
         return a == null ? b == null : a.equals(b);
+    }
+
+    /**
+     * 判重键：题干 + 全部选项 + 答案，去掉空白与标点后比较。
+     * 同一份题库重复导入时键不变（不会重复入库）；而「同题干但选项/答案不同」的两道真题键不同（不会互相覆盖）。
+     */
+    private String compareKey(String content, String... parts) {
+        StringBuilder sb = new StringBuilder(normalizeForCompare(content));
+        for (String part : parts) {
+            sb.append('\u0001').append(normalizeForCompare(part));
+        }
+        return sb.toString();
     }
 
     private String normalizeForCompare(String content) {
