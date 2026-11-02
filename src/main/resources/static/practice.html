@@ -5,275 +5,647 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>刷题练习</title>
     <style>
+        :root {
+            --ink: #111827;
+            --ink-2: #4b5563;
+            --ink-3: #6b7280;
+            --muted: #9ca3af;
+            --line: #eceef3;
+            --line-2: #e5e7f0;
+            --brand: #4f46e5;
+            --brand-2: #6366f1;
+            --ok: #16a34a;
+            --ok-bg: #f2fdf5;
+            --ok-line: #bbf7d0;
+            --bad: #dc2626;
+            --bad-bg: #fef4f4;
+            --bad-line: #fecaca;
+            --surface: #fff;
+            --bg: #f6f7fb;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-        .container { max-width: 900px; margin: 0 auto; padding: 30px 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; color: white; }
-        .progress-info { display: flex; gap: 20px; align-items: center; }
-        .progress { font-size: 20px; font-weight: bold; }
-        .btn { padding: 10px 20px; background: rgba(255,255,255,0.2); border: none; border-radius: 25px; color: white; cursor: pointer; text-decoration: none; transition: all 0.3s; }
-        .btn:hover { background: rgba(255,255,255,0.3); }
-        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
-        .btn-danger { background: #dc3545; }
-        .btn-danger:hover { background: #c82333; }
-        /* 错题重练模式 */
-        .btn-wrong { background: rgba(255,255,255,0.9); color: #c0392b; font-weight: bold; }
-        .btn-wrong:hover { background: #fff; }
-        .btn-wrong.active { background: #f39c12; color: #fff; }
-        .mode-banner { display: none; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 16px; border-radius: 12px; background: #fff7e6; border: 1px solid #ffe0a3; color: #a06a00; font-size: 14px; }
-        .mode-banner.show { display: flex; }
-        .mode-banner .mode-name { font-weight: bold; }
-        .mode-banner .mode-progress { margin-left: auto; color: #b8860b; }
-        .retry-btn { display: none; margin-top: 14px; padding: 9px 20px; border: none; border-radius: 20px; background: #667eea; color: #fff; cursor: pointer; font-size: 14px; font-family: inherit; }
-        .retry-btn.show { display: inline-block; }
-        .retry-btn:hover { background: #5a6fd8; }
-        .mastered-tip { display: none; margin-top: 12px; font-size: 14px; color: #155724; font-weight: bold; }
-        .mastered-tip.show { display: block; }
-        .question-card { background: white; border-radius: 20px; padding: 35px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-        /* 答题卡入口（题号不再平铺，题量大时也不占版面） */
-        .sheet-entry { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
-        .sheet-btn { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border: 2px solid #667eea; background: #f4f6ff; color: #667eea; border-radius: 25px; font-size: 15px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: inherit; }
-        .sheet-btn:hover { background: #667eea; color: white; }
-        .sheet-btn .sheet-count { font-weight: normal; font-size: 13px; opacity: 0.85; }
-        .jump-box { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-        .jump-box input { width: 82px; padding: 8px 10px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 14px; outline: none; font-family: inherit; }
-        .jump-box input:focus { border-color: #667eea; }
-        .jump-box button { padding: 8px 14px; border: none; border-radius: 10px; background: #eee; color: #444; cursor: pointer; font-size: 14px; font-family: inherit; }
-        .jump-box button:hover { background: #e0e0e0; }
+        html { height: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', Roboto, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            min-height: 100%;
+            -webkit-font-smoothing: antialiased;
+            position: relative;
+        }
+        /* 背景光斑：与首页同一套语言 */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body::before { width: 420px; height: 420px; background: rgba(99,102,241,.13); top: -180px; left: -120px; }
+        body::after  { width: 380px; height: 380px; background: rgba(236,72,153,.07); bottom: -200px; right: -130px; }
 
-        /* 答题卡抽屉 */
-        .sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); opacity: 0; visibility: hidden; transition: opacity 0.25s; z-index: 90; }
-        .sheet-mask.show { opacity: 1; visibility: visible; }
-        .sheet-panel { position: fixed; top: 0; right: 0; width: 440px; max-width: 100vw; height: 100%; background: white; box-shadow: -10px 0 40px rgba(0,0,0,0.2); transform: translateX(105%); transition: transform 0.28s ease; z-index: 91; display: flex; flex-direction: column; }
-        .sheet-panel.show { transform: translateX(0); }
-        .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 18px 20px 10px; }
-        .sheet-title { font-size: 18px; font-weight: bold; color: #333; }
-        .sheet-sub { font-size: 13px; color: #888; margin-top: 4px; font-weight: normal; }
-        .sheet-close { width: 34px; height: 34px; border: none; background: #f2f2f2; border-radius: 50%; font-size: 20px; color: #666; cursor: pointer; line-height: 1; flex: 0 0 auto; }
-        .sheet-close:hover { background: #e4e4e4; }
-        .sheet-tabs { display: flex; gap: 8px; padding: 0 20px 10px; flex-wrap: wrap; }
-        .sheet-tab { padding: 7px 14px; border-radius: 20px; border: 1px solid #e0e0e0; background: white; color: #666; font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
-        .sheet-tab:hover { border-color: #667eea; color: #667eea; }
-        .sheet-tab.active { background: #667eea; border-color: #667eea; color: white; }
-        .sheet-legend { display: flex; gap: 16px; padding: 0 20px 10px; font-size: 12px; color: #999; }
-        .sheet-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
-        .sheet-grid { flex: 1; overflow-y: auto; padding: 4px 20px 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 10px; align-content: start; }
-        .sheet-empty { grid-column: 1 / -1; text-align: center; color: #999; font-size: 14px; padding: 60px 0; }
-        .question-dot { height: 46px; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; font-size: 14px; border: 2px solid #e0e0e0; background: white; color: #555; transition: all 0.2s; font-family: inherit; padding: 0; }
-        .question-dot:hover { border-color: #667eea; background: #f8f9ff; color: #667eea; }
-        .question-dot.correct { background: #28a745; color: white; border-color: #28a745; }
-        .question-dot.wrong { background: #dc3545; color: white; border-color: #dc3545; }
-        .question-dot.current { border-color: #f39c12; border-width: 3px; box-shadow: 0 0 0 3px rgba(243,156,18,0.25); }
-        .sheet-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 20px; border-top: 1px solid #f0f0f0; font-size: 13px; color: #666; flex-wrap: wrap; }
-        .sheet-pager .pager-btns { display: flex; align-items: center; gap: 8px; }
-        .sheet-pager button { padding: 7px 12px; border: 1px solid #e0e0e0; background: white; border-radius: 8px; cursor: pointer; color: #444; font-size: 13px; font-family: inherit; }
-        .sheet-pager button:hover:not(:disabled) { border-color: #667eea; color: #667eea; }
-        .sheet-pager button:disabled { opacity: 0.35; cursor: not-allowed; }
-        .question-number { color: #667eea; font-weight: bold; font-size: 16px; margin-bottom: 15px; }
-        .question-type { color: #764ba2; font-size: 14px; margin-bottom: 10px; font-weight: bold; }
-        .question-content { font-size: 20px; line-height: 1.7; color: #333; margin-bottom: 30px; white-space: pre-wrap; word-break: break-word; }
-        .question-content pre { white-space: pre-wrap; font-family: Consolas, 'Courier New', monospace; background: #f6f8fa; padding: 12px 15px; border-radius: 8px; font-size: 16px; }
-        .question-images { margin-bottom: 20px; }
-        .question-images-toggle { font-size: 14px; color: #666; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-        .question-images-list img { max-width: 100%; height: auto; border: 1px solid #e0e0e0; border-radius: 8px; margin: 6px 0; display: block; }
-        .question-content table { border-collapse: collapse; width: 100%; margin: 15px 0; }
-        .question-content table th, .question-content table td { border: 1px solid #ddd; padding: 10px 15px; text-align: left; }
-        .question-content table th { background-color: #f5f5f5; font-weight: bold; }
-        .question-content img { max-width: 100%; height: auto; border-radius: 8px; }
-        
-        /* 判断题样式 */
-        .judge-options { display: flex; gap: 20px; }
-        .judge-option { flex: 1; padding: 25px; border: 3px solid #e0e0e0; border-radius: 15px; cursor: pointer; text-align: center; font-size: 20px; font-weight: bold; transition: all 0.3s; }
-        .judge-option:hover:not(.disabled) { border-color: #667eea; background: #f8f9ff; }
-        .judge-option.selected { border-color: #667eea; background: #eef2ff; color: #667eea; }
-        .judge-option.correct { border-color: #28a745; background: #d4edda; color: #28a745; }
-        .judge-option.wrong { border-color: #dc3545; background: #f8d7da; color: #dc3545; }
-        .judge-option.disabled { pointer-events: none; opacity: 0.8; }
-        
-        /* 选择题样式 */
-        .options { display: grid; gap: 15px; }
-        .option { display: flex; align-items: center; padding: 20px; border: 2px solid #e0e0e0; border-radius: 12px; cursor: pointer; transition: all 0.3s; }
-        .option:hover:not(.disabled) { border-color: #667eea; background: #f8f9ff; }
-        .option.selected { border-color: #667eea; background: #eef2ff; }
-        .option.correct { border-color: #28a745; background: #d4edda; }
-        .option.wrong { border-color: #dc3545; background: #f8d7da; }
-        .option.disabled { pointer-events: none; opacity: 0.8; }
-        .option-letter { flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; margin-right: 18px; font-weight: bold; font-size: 16px; color: #666; }
-        .option.selected .option-letter { background: #667eea; color: white; }
-        .option.correct .option-letter { background: #28a745; color: white; }
-        .option.wrong .option-letter { background: #dc3545; color: white; }
-        .option-content { font-size: 17px; color: #333; }
-        
-        /* 填空题样式 */
-        .fill-input { width: 100%; padding: 15px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 18px; outline: none; transition: all 0.3s; }
-        .fill-input:focus { border-color: #667eea; background: #f8f9ff; }
-        .fill-input.correct { border-color: #28a745; background: #d4edda; }
-        .fill-input.wrong { border-color: #dc3545; background: #f8d7da; }
-        
-        /* 简答题样式 */
-        .essay-textarea { width: 100%; min-height: 200px; padding: 15px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 16px; line-height: 1.6; resize: vertical; outline: none; transition: all 0.3s; }
-        .essay-textarea:focus { border-color: #667eea; background: #f8f9ff; }
-        
-        .feedback { margin-top: 25px; padding: 20px; border-radius: 12px; display: none; }
-        .feedback.correct { background: #d4edda; color: #155724; }
-        .feedback.wrong { background: #f8d7da; color: #721c24; }
+        /* ============ 顶部栏 ============ */
+        .topbar {
+            position: sticky; top: 0; z-index: 60;
+            background: rgba(255,255,255,.86);
+            backdrop-filter: saturate(180%) blur(14px);
+            -webkit-backdrop-filter: saturate(180%) blur(14px);
+            border-bottom: 1px solid var(--line);
+        }
+        .topbar-inner {
+            max-width: 880px; margin: 0 auto;
+            display: flex; align-items: center; gap: 14px;
+            padding: 12px 22px;
+        }
+        .icon-btn {
+            width: 38px; height: 38px; flex: none;
+            display: flex; align-items: center; justify-content: center;
+            border: none; border-radius: 12px;
+            background: #f3f4f8; color: var(--ink-2);
+            cursor: pointer; text-decoration: none;
+            transition: background .16s ease, color .16s ease;
+        }
+        .icon-btn:hover { background: #e9ebf3; color: var(--ink); }
+        .icon-btn.danger:hover { background: #fef2f2; color: var(--bad); }
+        .icon-btn svg { width: 19px; height: 19px; stroke: currentColor; }
+
+        .topbar-meta { flex: 1; min-width: 0; }
+        .topbar-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .topbar-title { font-size: 16px; font-weight: 650; letter-spacing: .2px; }
+        .mode-tag {
+            font-size: 11.5px; font-weight: 600; letter-spacing: .3px;
+            color: var(--brand); background: #eef0ff;
+            padding: 2px 7px; border-radius: 6px;
+        }
+        .mode-tag.wrong { color: #b45309; background: #fff7e6; }
+        .topbar-stats {
+            display: flex; align-items: center; gap: 7px;
+            margin-top: 3px; font-size: 12.5px; color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .topbar-stats b { color: var(--ink-2); font-weight: 650; }
+        .topbar-stats .sep { opacity: .45; }
+
+        .topbar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+        .pill-btn {
+            height: 38px; padding: 0 16px;
+            border: 1px solid var(--line-2); border-radius: 12px;
+            background: #fff; color: var(--ink-2);
+            font-family: inherit; font-size: 13.5px; font-weight: 600;
+            cursor: pointer; white-space: nowrap;
+            transition: border-color .16s ease, color .16s ease, background .16s ease;
+        }
+        .pill-btn:hover { border-color: #c7cbf5; color: var(--brand); background: #fafbff; }
+        .pill-btn.active { background: #eef0ff; border-color: #d6d9fb; color: var(--brand); }
+
+        .progress-rail { height: 2px; background: #f0f1f7; }
+        .progress-rail i {
+            display: block; height: 100%; width: 0;
+            background: linear-gradient(90deg, var(--brand), #8b5cf6);
+            transition: width .35s ease;
+        }
+
+        /* ============ 主体 ============ */
+        .stage {
+            position: relative; z-index: 1;
+            max-width: 880px; margin: 0 auto;
+            padding: 28px 22px 60px;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            padding: 30px 34px 26px;
+            box-shadow: 0 1px 2px rgba(17,24,39,.03), 0 14px 34px rgba(17,24,39,.06);
+        }
+
+        /* 题卡头部 */
+        .card-head {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding-bottom: 15px; margin-bottom: 20px;
+            border-bottom: 1px solid var(--line);
+        }
+        .type-pill {
+            font-size: 12.5px; font-weight: 650; letter-spacing: .3px;
+            color: var(--brand); background: #eef0ff;
+            padding: 5px 10px; border-radius: 8px;
+        }
+        .type-pill:empty { display: none; }
+        .q-index { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .card-head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+        .ghost-btn {
+            display: inline-flex; align-items: center; gap: 7px;
+            height: 34px; padding: 0 13px;
+            border: 1px solid var(--line-2); border-radius: 10px;
+            background: #fff; color: var(--ink-2);
+            font-family: inherit; font-size: 13px; font-weight: 600;
+            cursor: pointer; transition: border-color .16s ease, color .16s ease, background .16s ease;
+        }
+        .ghost-btn:hover { border-color: #c7cbf5; color: var(--brand); background: #fafbff; }
+        .ghost-btn svg { width: 15px; height: 15px; stroke: currentColor; }
+        .ghost-btn .muted { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+        .jump { display: flex; align-items: center; gap: 6px; }
+        .jump input {
+            width: 68px; height: 34px; padding: 0 10px;
+            border: 1px solid var(--line-2); border-radius: 10px;
+            font-family: inherit; font-size: 13px; color: var(--ink);
+            outline: none; background: #fff;
+            transition: border-color .16s ease, box-shadow .16s ease;
+            -moz-appearance: textfield;
+        }
+        .jump input::-webkit-outer-spin-button,
+        .jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .jump input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+        .jump button {
+            height: 34px; padding: 0 12px; border: none; border-radius: 10px;
+            background: #f3f4f8; color: var(--ink-2);
+            font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: background .16s ease;
+        }
+        .jump button:hover { background: #e9ebf3; }
+
+        /* 错题重练提示条 */
+        .mode-banner {
+            display: none; align-items: center; gap: 9px;
+            padding: 11px 14px; margin-bottom: 20px;
+            border: 1px solid #fde68a; border-radius: 12px;
+            background: #fffbeb; color: #b45309;
+            font-size: 13px; font-weight: 600;
+        }
+        .mode-banner.show { display: flex; }
+        .mode-banner .mode-dot {
+            width: 7px; height: 7px; flex: none; border-radius: 50%;
+            background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.16);
+        }
+        .mode-banner .mode-name { font-weight: 650; }
+        .mode-banner .mode-progress {
+            margin-left: auto; font-weight: 500; font-size: 12.5px;
+            color: #a16207; font-variant-numeric: tabular-nums;
+        }
+
+        /* 题干 */
+        .question-content {
+            font-size: 19px; line-height: 1.85; letter-spacing: .1px;
+            color: #1f2937; margin-bottom: 26px;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .question-content pre {
+            white-space: pre-wrap;
+            font-family: ui-monospace, Consolas, 'Courier New', monospace;
+            background: #f8f9fc; border: 1px solid var(--line);
+            padding: 14px 16px; border-radius: 12px;
+            font-size: 14.5px; line-height: 1.7; margin: 12px 0;
+        }
+        .question-content table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 15px; }
+        .question-content table th,
+        .question-content table td { border: 1px solid var(--line-2); padding: 10px 14px; text-align: left; }
+        .question-content table th { background: #f8f9fc; font-weight: 650; }
+        .question-content img { max-width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
+
+        .question-images { margin-bottom: 22px; }
+        .question-images-toggle {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-size: 13px; color: var(--ink-3); cursor: pointer; user-select: none;
+        }
+        .question-images-toggle input { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+        .question-images-list { margin-top: 12px; }
+        .question-images-list img {
+            max-width: 100%; height: auto; display: block;
+            border: 1px solid var(--line); border-radius: 12px; margin: 8px 0;
+        }
+
+        /* 判断题 */
+        .judge-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .judge-option {
+            padding: 22px 16px;
+            border: 1px solid var(--line-2); border-radius: 14px;
+            background: #fff; cursor: pointer; text-align: center;
+            font-size: 16.5px; font-weight: 650; color: var(--ink-2);
+            transition: border-color .15s ease, background .15s ease, color .15s ease, transform .15s ease;
+        }
+        .judge-option:hover:not(.disabled) { border-color: #c7cbf5; background: #fafbff; color: var(--brand); transform: translateY(-1px); }
+        .judge-option.selected { border-color: var(--brand); background: #f4f5ff; color: var(--brand); box-shadow: 0 0 0 3px rgba(79,70,229,.08); }
+        .judge-option.correct { border-color: var(--ok-line); background: var(--ok-bg); color: #15803d; }
+        .judge-option.wrong { border-color: var(--bad-line); background: var(--bad-bg); color: #b91c1c; }
+        .judge-option.disabled { pointer-events: none; }
+        .judge-option.disabled:not(.correct):not(.wrong) { opacity: .55; }
+
+        /* 选择题 */
+        .options { display: grid; gap: 11px; }
+        .option {
+            display: flex; align-items: flex-start; gap: 13px;
+            padding: 14px 16px;
+            border: 1px solid var(--line-2); border-radius: 14px;
+            background: #fff; cursor: pointer;
+            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+        }
+        .option:hover:not(.disabled) { border-color: #c7cbf5; background: #fafbff; }
+        .option.selected { border-color: var(--brand); background: #f4f5ff; box-shadow: 0 0 0 3px rgba(79,70,229,.08); }
+        .option.correct { border-color: var(--ok-line); background: var(--ok-bg); }
+        .option.wrong { border-color: var(--bad-line); background: var(--bad-bg); }
+        .option.disabled { pointer-events: none; }
+        .option.disabled:not(.correct):not(.wrong) { opacity: .55; }
+        .option-letter {
+            width: 27px; height: 27px; flex: 0 0 27px;
+            border-radius: 9px; background: #f3f4f8;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 650; color: var(--ink-3);
+            margin-top: 1px;
+            transition: background .15s ease, color .15s ease;
+        }
+        .option.selected .option-letter { background: var(--brand); color: #fff; }
+        .option.correct .option-letter { background: var(--ok); color: #fff; }
+        .option.wrong .option-letter { background: var(--bad); color: #fff; }
+        .option-content { font-size: 15.5px; line-height: 1.7; color: #1f2937; padding-top: 2px; word-break: break-word; }
+
+        /* 填空题 / 简答题 */
+        .fill-input {
+            width: 100%; height: 52px; padding: 0 16px;
+            border: 1px solid var(--line-2); border-radius: 13px;
+            font-family: inherit; font-size: 16px; color: var(--ink);
+            outline: none; background: #fff;
+            transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+        }
+        .fill-input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+        .fill-input.correct { border-color: var(--ok-line); background: var(--ok-bg); color: #15803d; }
+        .fill-input.wrong { border-color: var(--bad-line); background: var(--bad-bg); color: #b91c1c; }
+        .essay-textarea {
+            width: 100%; min-height: 180px; padding: 14px 16px;
+            border: 1px solid var(--line-2); border-radius: 13px;
+            font-family: inherit; font-size: 15.5px; line-height: 1.7; color: var(--ink);
+            resize: vertical; outline: none; background: #fff;
+            transition: border-color .16s ease, box-shadow .16s ease;
+        }
+        .essay-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+
+        .submit-btn {
+            height: 48px; padding: 0 26px;
+            border: none; border-radius: 13px;
+            background: linear-gradient(135deg, var(--brand), var(--brand-2));
+            color: #fff; font-family: inherit; font-size: 15px; font-weight: 600;
+            cursor: pointer; box-shadow: 0 6px 16px rgba(79,70,229,.22);
+            transition: transform .16s ease, box-shadow .16s ease;
+        }
+        .submit-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(79,70,229,.28); }
+        .submit-btn:active { transform: translateY(0); }
+
+        /* 答题反馈 */
+        .feedback {
+            display: none; margin-top: 24px; padding: 18px 20px;
+            border: 1px solid var(--line); border-radius: 14px;
+            background: #fafbfd;
+        }
         .feedback.show { display: block; }
-        .feedback-title { font-weight: bold; font-size: 18px; margin-bottom: 10px; }
-        .feedback-analysis { font-style: italic; opacity: 0.8; }
-        .button-group { display: flex; gap: 15px; margin-top: 25px; }
-        .nav-btn { padding: 16px 30px; border: none; border-radius: 50px; font-size: 18px; cursor: pointer; display: none; transition: all 0.3s; }
-        .nav-btn.show { display: block; }
-        .nav-btn.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .nav-btn.primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102,126,234,0.4); }
-        .nav-btn.secondary { background: #e0e0e0; color: #333; }
-        .nav-btn.secondary:hover { background: #d0d0d0; }
-        .submit-btn { padding: 16px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 50px; font-size: 18px; cursor: pointer; transition: all 0.3s; }
-        .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102,126,234,0.4); }
-        .completion { text-align: center; padding: 60px 30px; }
-        .completion-icon { font-size: 72px; margin-bottom: 20px; }
-        .completion-title { font-size: 28px; color: #333; margin-bottom: 20px; }
-        .completion-score { font-size: 24px; color: #667eea; font-weight: bold; margin-bottom: 30px; }
-        .completion-stats { display: flex; justify-content: center; gap: 40px; margin-bottom: 30px; }
-        .stat-item { text-align: center; }
-        .stat-value { font-size: 32px; font-weight: bold; color: #333; }
-        .stat-label { color: #666; font-size: 14px; }
-        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 50px auto; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .loading-text { text-align: center; color: #666; margin-top: 20px; }
+        .feedback.correct { background: var(--ok-bg); border-color: var(--ok-line); }
+        .feedback.wrong { background: var(--bad-bg); border-color: var(--bad-line); }
+        .feedback-title { font-size: 15px; font-weight: 650; line-height: 1.5; }
+        .feedback.correct .feedback-title { color: #15803d; }
+        .feedback.wrong .feedback-title { color: #b91c1c; }
+        .feedback-analysis {
+            margin-top: 9px; padding-left: 12px;
+            border-left: 2px solid rgba(17,24,39,.08);
+            font-size: 14px; line-height: 1.8; color: var(--ink-2);
+        }
+        .feedback-analysis:empty { display: none; }
+        .retry-btn {
+            display: none; margin-top: 14px;
+            height: 38px; padding: 0 18px;
+            border: 1px solid #d6d9fb; border-radius: 10px;
+            background: #fff; color: var(--brand);
+            font-family: inherit; font-size: 13.5px; font-weight: 600;
+            cursor: pointer; transition: background .16s ease;
+        }
+        .retry-btn.show { display: inline-flex; align-items: center; }
+        .retry-btn:hover { background: #f4f5ff; }
+        .mastered-tip {
+            display: none; margin-top: 12px;
+            font-size: 13px; font-weight: 600; color: #15803d;
+        }
+        .mastered-tip.show { display: block; }
+
+        /* 底部导航 */
+        .button-group { display: flex; gap: 12px; margin-top: 26px; }
+        .nav-btn {
+            display: none; height: 50px; padding: 0 24px;
+            border: 1px solid transparent; border-radius: 13px;
+            font-family: inherit; font-size: 15px; font-weight: 600;
+            cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+        }
+        .nav-btn.show { display: inline-flex; align-items: center; justify-content: center; }
+        .nav-btn.secondary { background: #fff; border-color: var(--line-2); color: var(--ink-2); }
+        .nav-btn.secondary:hover { border-color: #c7cbf5; color: var(--brand); background: #fafbff; }
+        .nav-btn.primary {
+            margin-left: auto; min-width: 160px;
+            background: linear-gradient(135deg, var(--brand), var(--brand-2));
+            color: #fff; box-shadow: 0 6px 16px rgba(79,70,229,.22);
+        }
+        .nav-btn.primary:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(79,70,229,.28); }
+
+        /* 结算页 */
+        .completion { text-align: center; padding: 52px 34px 44px; }
+        .completion-icon {
+            width: 64px; height: 64px; margin: 0 auto 22px;
+            border-radius: 22px;
+            background: linear-gradient(140deg, var(--brand), var(--brand-2));
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 10px 24px rgba(79,70,229,.28);
+        }
+        .completion-icon svg { width: 32px; height: 32px; stroke: #fff; }
+        .completion-title { font-size: 22px; font-weight: 650; color: var(--ink); margin-bottom: 8px; }
+        .completion-score { font-size: 14px; color: var(--muted); margin-bottom: 28px; font-variant-numeric: tabular-nums; }
+        .completion-stats {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+            max-width: 460px; margin: 0 auto 32px;
+        }
+        .stat-item { padding: 18px 10px; border: 1px solid var(--line); border-radius: 16px; background: #fbfbfe; }
+        .stat-value { font-size: 26px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--ink); }
+        .stat-value.brand { color: var(--brand); }
+        .stat-value.ok { color: var(--ok); }
+        .stat-value.bad { color: var(--bad); }
+        .stat-label { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            height: 48px; padding: 0 26px;
+            border: 1px solid var(--line-2); border-radius: 13px;
+            background: #fff; color: var(--ink-2);
+            font-family: inherit; font-size: 14.5px; font-weight: 600;
+            text-decoration: none; cursor: pointer;
+            transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, color .16s ease, background .16s ease;
+        }
+        .btn:hover { border-color: #c7cbf5; color: var(--brand); background: #fafbff; }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--brand), var(--brand-2));
+            border-color: transparent; color: #fff;
+            box-shadow: 0 6px 16px rgba(79,70,229,.22);
+        }
+        .btn-primary:hover { color: #fff; transform: translateY(-1px); box-shadow: 0 10px 22px rgba(79,70,229,.28); }
+
+        /* 载入 */
+        .loading-box { padding: 80px 0; text-align: center; }
+        .spinner {
+            width: 34px; height: 34px; margin: 0 auto;
+            border: 3px solid #eceef3; border-top-color: var(--brand);
+            border-radius: 50%; animation: spin .9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 14px; font-size: 13.5px; color: var(--muted); }
+
+        /* ============ 答题卡抽屉 ============ */
+        .sheet-mask {
+            position: fixed; inset: 0; z-index: 90;
+            background: rgba(17,24,39,.36);
+            backdrop-filter: blur(2px);
+            opacity: 0; visibility: hidden;
+            transition: opacity .25s ease;
+        }
+        .sheet-mask.show { opacity: 1; visibility: visible; }
+        .sheet-panel {
+            position: fixed; top: 0; right: 0; z-index: 91;
+            width: 440px; max-width: 100vw; height: 100%;
+            display: flex; flex-direction: column;
+            background: #fff; border-radius: 20px 0 0 20px;
+            box-shadow: -20px 0 50px rgba(17,24,39,.14);
+            transform: translateX(105%);
+            transition: transform .3s cubic-bezier(.4,0,.2,1);
+        }
+        .sheet-panel.show { transform: translateX(0); }
+        .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 22px 22px 12px; }
+        .sheet-title { font-size: 17px; font-weight: 650; color: var(--ink); }
+        .sheet-sub { margin-top: 5px; font-size: 12.5px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .sheet-close {
+            width: 32px; height: 32px; flex: none;
+            border: none; border-radius: 10px;
+            background: #f3f4f8; color: var(--ink-3);
+            font-size: 18px; line-height: 1; cursor: pointer;
+            transition: background .16s ease, color .16s ease;
+        }
+        .sheet-close:hover { background: #e9ebf3; color: var(--ink); }
+        .sheet-tabs { display: flex; gap: 8px; padding: 0 22px 12px; flex-wrap: wrap; }
+        .sheet-tab {
+            height: 30px; padding: 0 13px;
+            border: 1px solid var(--line-2); border-radius: 9px;
+            background: #fff; color: var(--ink-3);
+            font-family: inherit; font-size: 12.5px; font-weight: 600;
+            cursor: pointer; font-variant-numeric: tabular-nums;
+            transition: border-color .16s ease, color .16s ease, background .16s ease;
+        }
+        .sheet-tab:hover { border-color: #c7cbf5; color: var(--brand); }
+        .sheet-tab.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+        .sheet-legend { display: flex; gap: 14px; padding: 0 22px 12px; font-size: 11.5px; color: var(--muted); }
+        .sheet-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+        .sheet-grid {
+            flex: 1; overflow-y: auto; padding: 4px 22px 20px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+            gap: 9px; align-content: start;
+        }
+        .sheet-empty { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: 13.5px; padding: 60px 0; }
+        .question-dot {
+            height: 44px; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--line-2); border-radius: 10px;
+            background: #fff; color: var(--ink-3);
+            font-family: inherit; font-size: 13.5px; font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            cursor: pointer; transition: border-color .14s ease, color .14s ease, background .14s ease;
+        }
+        .question-dot:hover { border-color: #c7cbf5; color: var(--brand); background: #fafbff; }
+        .question-dot.correct { background: var(--ok-bg); border-color: var(--ok-line); color: #15803d; }
+        .question-dot.wrong { background: var(--bad-bg); border-color: var(--bad-line); color: #b91c1c; }
+        .question-dot.current { border-color: var(--brand); color: var(--brand); font-weight: 700; box-shadow: 0 0 0 2px rgba(79,70,229,.18); }
+        .sheet-pager {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 14px 22px; border-top: 1px solid var(--line);
+            font-size: 12.5px; color: var(--muted); flex-wrap: wrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .sheet-pager .pager-btns { display: flex; align-items: center; gap: 8px; }
+        .sheet-pager button {
+            height: 30px; padding: 0 11px;
+            border: 1px solid var(--line-2); border-radius: 9px;
+            background: #fff; color: var(--ink-2);
+            font-family: inherit; font-size: 12.5px; cursor: pointer;
+            transition: border-color .16s ease, color .16s ease;
+        }
+        .sheet-pager button:hover:not(:disabled) { border-color: #c7cbf5; color: var(--brand); }
+        .sheet-pager button:disabled { opacity: .4; cursor: not-allowed; }
 
         @media (max-width: 560px) {
-            .container { padding: 18px 12px; }
-            .question-card { padding: 22px 16px; }
-            .sheet-panel { width: 100%; }
-            .sheet-grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; padding: 4px 14px 16px; }
-            .jump-box { margin-left: 0; }
+            .topbar-inner { padding: 10px 14px; gap: 10px; }
+            .topbar-title { font-size: 14.5px; }
+            .topbar-stats { font-size: 11.5px; gap: 5px; }
+            .icon-btn { width: 34px; height: 34px; border-radius: 10px; }
+            .icon-btn svg { width: 17px; height: 17px; }
+            .pill-btn { height: 34px; padding: 0 11px; font-size: 12.5px; border-radius: 10px; }
+            .stage { padding: 16px 12px 48px; }
+            .card { padding: 20px 16px 18px; border-radius: 18px; }
+            .card-head { gap: 8px; margin-bottom: 16px; padding-bottom: 13px; }
+            .jump { display: none; }
+            .ghost-btn { height: 32px; font-size: 12.5px; padding: 0 11px; }
+            .question-content { font-size: 16.5px; line-height: 1.8; margin-bottom: 20px; }
+            .option { padding: 12px 13px; gap: 11px; }
+            .option-content { font-size: 14.5px; }
+            .judge-option { padding: 18px 12px; font-size: 15px; }
+            .feedback { padding: 15px 16px; }
+            .button-group { margin-top: 20px; gap: 10px; }
+            .nav-btn { height: 46px; font-size: 14px; padding: 0 16px; }
+            .nav-btn.primary { min-width: 0; flex: 1; }
+            .completion { padding: 40px 16px 34px; }
+            .completion-stats { gap: 9px; }
+            .stat-value { font-size: 21px; }
+            .sheet-panel { width: 100%; border-radius: 0; }
+            .sheet-grid { grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 8px; padding: 4px 16px 16px; }
+            .sheet-head { padding: 18px 16px 10px; }
+            .sheet-tabs { padding: 0 16px 10px; }
+            .sheet-legend { padding: 0 16px 10px; }
+            .sheet-pager { padding: 12px 16px; }
+            .btn { width: 100%; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="progress-info">
-                <div class="progress">
-                    <span id="current">0</span> / <span id="total">0</span>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a class="icon-btn" href="index.html" title="返回首页" aria-label="返回首页">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+            </a>
+            <div class="topbar-meta">
+                <div class="topbar-line">
+                    <span class="topbar-title">刷题练习</span>
+                    <span class="mode-tag" id="topModeTag">全部题目</span>
                 </div>
-                <div class="progress">
-                    已答：<span id="answered">0</span>
-                </div>
-                <div class="progress" id="wrongStatBox">
-                    错题：<span id="wrongTotal">0</span>
+                <div class="topbar-stats">
+                    <span><b id="current">0</b> / <span id="total">0</span></span>
+                    <span class="sep">·</span>
+                    <span>已答 <b id="answered">0</b></span>
+                    <span class="sep">·</span>
+                    <span id="wrongStatBox">错题 <b id="wrongTotal">0</b></span>
                 </div>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <button class="btn btn-wrong" id="wrongModeBtn" onclick="toggleWrongMode()">🔁 错题重练</button>
-                <a href="index.html" class="btn">🏠 返回</a>
-                <button class="btn btn-danger" onclick="clearProgress()">🗑️ 清除进度</button>
+            <div class="topbar-actions">
+                <button class="pill-btn" id="wrongModeBtn" onclick="toggleWrongMode()">错题重练</button>
+                <button class="icon-btn danger" onclick="clearProgress()" title="清除进度" aria-label="清除进度">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18"/><path d="M8 6V4h8v2"/>
+                        <path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>
+                    </svg>
+                </button>
             </div>
         </div>
+        <div class="progress-rail"><i id="progressBar"></i></div>
+    </header>
 
-        <div id="loading">
+    <main class="stage">
+        <div class="loading-box" id="loading">
             <div class="spinner"></div>
-            <div class="loading-text">加载题目中...</div>
+            <div class="loading-text">加载题目中…</div>
         </div>
 
-        <div id="questionContainer" style="display: none;">
-            <div class="question-card">
-                <div class="mode-banner" id="modeBanner">
-                    <span>🔁 错题重练中</span>
-                    <span class="mode-name" id="modeName">共 0 题</span>
-                    <span class="mode-progress" id="modeProgress">已重练 0 · 已答对 0</span>
-                </div>
-                <div class="sheet-entry">
-                    <button class="sheet-btn" onclick="openSheet()">
-                        📋 答题卡
-                        <span class="sheet-count" id="sheetCount">0/0</span>
+        <section class="card" id="questionContainer" style="display: none;">
+            <div class="card-head">
+                <span class="type-pill" id="questionType"></span>
+                <span class="q-index" id="questionNumber">第 1 题</span>
+                <div class="card-head-right">
+                    <button class="ghost-btn" onclick="openSheet()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                            <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+                        </svg>
+                        答题卡
+                        <span class="muted" id="sheetCount">0/0</span>
                     </button>
-                    <div class="jump-box">
+                    <div class="jump">
                         <input type="number" id="jumpInput" min="1" placeholder="题号"
                                onkeypress="if(event.key==='Enter'){jumpTo();}">
                         <button onclick="jumpTo()">跳转</button>
                     </div>
                 </div>
+            </div>
 
-                <div class="question-number" id="questionNumber">第 1 题</div>
-                <div class="question-type" id="questionType"></div>
-                <div class="question-content" id="questionContent"></div>
-                <div class="question-images" id="questionImages" style="display:none;">
-                    <label class="question-images-toggle">
-                        <input type="checkbox" id="imagesToggle" checked onchange="toggleQuestionImages()">
-                        显示题目图片（PDF 原图）
-                    </label>
-                    <div class="question-images-list" id="questionImagesList"></div>
-                </div>
-                
-                <!-- 判断题选项 -->
-                <div class="judge-options" id="judgeOptions" style="display: none;">
-                    <div class="judge-option" data-answer="对" onclick="selectJudgeOption('对')">√ 对</div>
-                    <div class="judge-option" data-answer="错" onclick="selectJudgeOption('错')">× 错</div>
-                </div>
-                
-                <!-- 选择题选项（由 JS 按题目实际选项渲染，支持 A-G） -->
-                <div class="options" id="selectOptions" style="display: none;"></div>
-                
-                <!-- 填空题输入框 -->
-                <div id="fillContainer" style="display: none;">
-                    <input type="text" class="fill-input" id="fillInput" placeholder="请输入答案..." onkeypress="handleFillKeyPress(event)">
-                    <button class="submit-btn" onclick="submitFillAnswer()" style="margin-top: 15px;">提交答案</button>
-                </div>
-                
-                <!-- 简答题文本框 -->
-                <div id="essayContainer" style="display: none;">
-                    <textarea class="essay-textarea" id="essayTextarea" placeholder="请输入你的答案..."></textarea>
-                    <button class="submit-btn" onclick="submitEssayAnswer()" style="margin-top: 15px;">提交答案</button>
-                </div>
-                
-                <!-- 多选题确认答案按钮 -->
-                <div id="confirmBtnContainer" style="display: none; margin-top: 20px; text-align: center;">
-                    <button class="submit-btn" onclick="confirmMultipleAnswer()">确认答案</button>
-                </div>
+            <div class="mode-banner" id="modeBanner">
+                <span class="mode-dot"></span>
+                <span class="mode-name" id="modeName">错题重练</span>
+                <span class="mode-progress" id="modeProgress">已重练 0 · 已答对 0</span>
+            </div>
 
-                <div class="feedback" id="feedback">
-                    <div class="feedback-title" id="feedbackTitle"></div>
-                    <div class="feedback-analysis" id="feedbackAnalysis"></div>
-                    <button class="retry-btn" id="retryBtn" onclick="retryCurrent()">↺ 再试一次</button>
-                    <div class="mastered-tip" id="masteredTip">✓ 已掌握，本题将从错题集移除</div>
-                </div>
+            <div class="question-content" id="questionContent"></div>
 
-                <div class="button-group">
-                    <button class="nav-btn secondary" id="prevBtn" onclick="prevQuestion()">← 上一题</button>
-                    <button class="nav-btn primary" id="nextBtn" onclick="nextQuestion()">下一题 →</button>
+            <div class="question-images" id="questionImages" style="display: none;">
+                <label class="question-images-toggle">
+                    <input type="checkbox" id="imagesToggle" checked onchange="toggleQuestionImages()">
+                    显示题目图片（PDF 原图）
+                </label>
+                <div class="question-images-list" id="questionImagesList"></div>
+            </div>
+
+            <!-- 判断题 -->
+            <div class="judge-options" id="judgeOptions" style="display: none;">
+                <div class="judge-option" data-answer="对" onclick="selectJudgeOption('对')">√ 对</div>
+                <div class="judge-option" data-answer="错" onclick="selectJudgeOption('错')">× 错</div>
+            </div>
+
+            <!-- 选择题（由 JS 按题目实际选项渲染，支持 A-G） -->
+            <div class="options" id="selectOptions" style="display: none;"></div>
+
+            <!-- 填空题 -->
+            <div id="fillContainer" style="display: none;">
+                <input type="text" class="fill-input" id="fillInput" placeholder="请输入答案…" onkeypress="handleFillKeyPress(event)">
+                <button class="submit-btn" onclick="submitFillAnswer()" style="margin-top: 14px;">提交答案</button>
+            </div>
+
+            <!-- 简答题 -->
+            <div id="essayContainer" style="display: none;">
+                <textarea class="essay-textarea" id="essayTextarea" placeholder="请输入你的答案…"></textarea>
+                <button class="submit-btn" onclick="submitEssayAnswer()" style="margin-top: 14px;">提交答案</button>
+            </div>
+
+            <!-- 多选题确认 -->
+            <div id="confirmBtnContainer" style="display: none; margin-top: 18px;">
+                <button class="submit-btn" onclick="confirmMultipleAnswer()">确认答案</button>
+            </div>
+
+            <div class="feedback" id="feedback">
+                <div class="feedback-title" id="feedbackTitle"></div>
+                <div class="feedback-analysis" id="feedbackAnalysis"></div>
+                <button class="retry-btn" id="retryBtn" onclick="retryCurrent()">↺ 再试一次</button>
+                <div class="mastered-tip" id="masteredTip">✓ 已掌握，本题将从错题集移除</div>
+            </div>
+
+            <div class="button-group">
+                <button class="nav-btn secondary" id="prevBtn" onclick="prevQuestion()">← 上一题</button>
+                <button class="nav-btn primary" id="nextBtn" onclick="nextQuestion()">下一题 →</button>
+            </div>
+        </section>
+
+        <section class="card completion" id="completion" style="display: none;">
+            <div class="completion-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+            </div>
+            <div class="completion-title">恭喜完成！</div>
+            <div class="completion-score">答对 <span id="correctCount">0</span> / <span id="totalCount">0</span> 题</div>
+            <div class="completion-stats">
+                <div class="stat-item">
+                    <div class="stat-value brand" id="accuracy">0%</div>
+                    <div class="stat-label">正确率</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value ok" id="correctNum">0</div>
+                    <div class="stat-label">答对</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value bad" id="wrongNum">0</div>
+                    <div class="stat-label">答错</div>
                 </div>
             </div>
-        </div>
-
-        <div class="question-card" id="completion" style="display: none;">
-            <div class="completion">
-                <div class="completion-icon">🎉</div>
-                <div class="completion-title">恭喜完成！</div>
-                <div class="completion-score">
-                    得分：<span id="correctCount">0</span> / <span id="totalCount">0</span>
-                </div>
-                <div class="completion-stats">
-                    <div class="stat-item">
-                        <div class="stat-value" id="accuracy"></div>
-                        <div class="stat-label">正确率</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="correctNum">0</div>
-                        <div class="stat-label">正确</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="wrongNum">0</div>
-                        <div class="stat-label">错误</div>
-                    </div>
-                </div>
-                <button class="btn btn-primary" id="backToAllBtn" onclick="exitWrongMode()"
-                        style="display:none; margin-right:10px;">← 返回全部题目</button>
-                <a href="index.html" class="btn btn-primary">🏠 返回首页</a>
-            </div>
-        </div>
-    </div>
+            <button class="btn" id="backToAllBtn" onclick="exitWrongMode()" style="display: none; margin: 0 6px 0 0;">返回全部题目</button>
+            <a href="index.html" class="btn btn-primary" style="margin: 0;">返回首页</a>
+        </section>
+    </main>
 
     <!-- 答题卡抽屉：题号按 50 个一页展示，支持筛选未答/错题 -->
     <div class="sheet-mask" id="sheetMask" onclick="closeSheet()"></div>
@@ -291,10 +663,10 @@
             <button class="sheet-tab" data-filter="wrong" onclick="setSheetFilter('wrong')" id="tabWrong">错题</button>
         </div>
         <div class="sheet-legend">
-            <span><i style="background:#28a745;"></i>答对</span>
-            <span><i style="background:#dc3545;"></i>答错</span>
-            <span><i style="background:#fff;border:1px solid #e0e0e0;"></i>未答</span>
-            <span><i style="background:#fff;border:2px solid #f39c12;"></i>当前</span>
+            <span><i style="background:#d1fadf;"></i>答对</span>
+            <span><i style="background:#fecaca;"></i>答错</span>
+            <span><i style="background:#fff;border:1px solid #e5e7f0;"></i>未答</span>
+            <span><i style="background:#fff;border:2px solid #4f46e5;"></i>当前</span>
         </div>
         <div class="sheet-grid" id="sheetGrid"></div>
         <div class="sheet-pager">
@@ -401,14 +773,31 @@
             document.getElementById('wrongTotal').textContent = n;
             const btn = document.getElementById('wrongModeBtn');
             if (mode !== 'wrong') {
-                btn.textContent = n > 0 ? `🔁 错题重练 (${n})` : '🔁 错题重练';
+                btn.textContent = n > 0 ? `错题重练 ${n}` : '错题重练';
             }
+        }
+
+        // 顶部细进度条：已答 / 队列总数
+        function setProgressBar(stats) {
+            const bar = document.getElementById('progressBar');
+            if (!bar) return;
+            const pct = queue.length ? Math.round((stats.answered / queue.length) * 100) : 0;
+            bar.style.width = pct + '%';
+        }
+
+        // 顶部模式标签
+        function setModeTag(isWrong) {
+            const tag = document.getElementById('topModeTag');
+            if (!tag) return;
+            tag.textContent = isWrong ? '错题重练' : '全部题目';
+            tag.classList.toggle('wrong', !!isWrong);
         }
 
         function updateQueueHeader() {
             const stats = computeStats();
             document.getElementById('total').textContent = queue.length;
             document.getElementById('answered').textContent = stats.answered;
+            setProgressBar(stats);
             if (mode === 'wrong') {
                 document.getElementById('modeName').textContent = `共 ${queue.length} 题`;
                 document.getElementById('modeProgress').textContent =
@@ -447,6 +836,7 @@
             document.getElementById('wrongModeBtn').textContent = '← 返回全部题目';
             document.getElementById('wrongModeBtn').classList.add('active');
             document.getElementById('wrongStatBox').style.display = 'none';
+            setModeTag(true);
             updateQueueHeader();
             loadQuestion(0);
             if (sheetOpen) renderSheet();
@@ -460,9 +850,10 @@
             clearAutoJump();
 
             document.getElementById('modeBanner').classList.remove('show');
-            document.getElementById('wrongModeBtn').textContent = '🔁 错题重练';
+            document.getElementById('wrongModeBtn').textContent = '错题重练';
             document.getElementById('wrongModeBtn').classList.remove('active');
             document.getElementById('wrongStatBox').style.display = '';
+            setModeTag(false);
             document.getElementById('completion').style.display = 'none';
             document.getElementById('questionContainer').style.display = 'block';
             refreshWrongTotal();
@@ -522,6 +913,7 @@
             document.getElementById('tabUnanswered').textContent = `未答 ${stats.unanswered}`;
             document.getElementById('tabWrong').textContent = `错题 ${stats.wrong}`;
             document.getElementById('answered').textContent = stats.answered;
+            setProgressBar(stats);
             if (mode === 'wrong') {
                 document.getElementById('modeProgress').textContent =
                     `已重练 ${stats.answered} · 已答对 ${stats.correct}`;
@@ -648,15 +1040,16 @@
             loadQuestion(num - 1);
         }
 
+        // 题型名称：直接放在胶囊标签里，不带书名号
         function getQuestionTypeName(type) {
             const typeMap = {
-                'single': '【单选题】',
-                'multiple': '【多选题】',
-                'judge': '【判断题】',
-                'fill': '【填空题】',
-                'essay': '【简答题】'
+                'single': '单选题',
+                'multiple': '多选题',
+                'judge': '判断题',
+                'fill': '填空题',
+                'essay': '简答题'
             };
-            return typeMap[type] || '【单选题】';
+            return typeMap[type] || '单选题';
         }
 
         // 按题目实际选项渲染（支持 A-G，兼容只有 2~3 个选项的题）
@@ -1137,7 +1530,7 @@
         function showCompletion() {
             document.getElementById('questionContainer').style.display = 'none';
             document.getElementById('completion').style.display = 'block';
-            document.getElementById('backToAllBtn').style.display = mode === 'wrong' ? 'inline-block' : 'none';
+            document.getElementById('backToAllBtn').style.display = mode === 'wrong' ? 'inline-flex' : 'none';
 
             const titleEl = document.querySelector('.completion-title');
             if (mode === 'wrong') {
