@@ -36,11 +36,12 @@
             <div class="btn-group">
                 <a href="upload.html" class="btn btn-primary">📤 上传题库</a>
                 <a href="practice.html" class="btn btn-secondary">✏️ 开始刷题</a>
+                <a href="practice.html?mode=wrong" class="btn btn-secondary" id="wrongBtn">🔁 错题重练</a>
                 <button class="btn btn-danger" onclick="clearQuestions()">🗑️ 清空题目</button>
             </div>
             
             <div class="stats" id="stats">
-                <p>题库中共有 <span id="questionCount">0</span> 道题目</p>
+                <p>题库中共有 <span id="questionCount">0</span> 道题目，错题 <span id="wrongCount">0</span> 道</p>
             </div>
 
             <div class="features">
@@ -78,6 +79,21 @@
                 });
         }
 
+        // 错题数：顺带把「错题重练」入口按数量可视化
+        function loadWrongCount() {
+            fetch(`${API_BASE}/api/answers/wrong`)
+                .then(res => res.json())
+                .then(data => {
+                    const n = data.total || 0;
+                    document.getElementById('wrongCount').textContent = n;
+                    const btn = document.getElementById('wrongBtn');
+                    btn.textContent = n > 0 ? `🔁 错题重练 (${n})` : '🔁 错题重练';
+                })
+                .catch(err => {
+                    console.log('获取错题数量失败:', err);
+                });
+        }
+
         function clearQuestions() {
             const confirmed = confirm('⚠️ 确定要清空所有题目信息吗？\n\n此操作会删除所有题目、题库和答题记录，且不可恢复！');
             
@@ -95,6 +111,7 @@
                 if (data && data.success) {
                     alert('✅ ' + data.message);
                     loadQuestionCount();
+                    loadWrongCount();
                 } else {
                     alert('❌ ' + (data && data.message ? data.message : '清空失败'));
                 }
@@ -105,6 +122,7 @@
         }
 
         loadQuestionCount();
+        loadWrongCount();
     </script>
 </body>
 </html>

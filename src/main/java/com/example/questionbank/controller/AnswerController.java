@@ -189,6 +189,50 @@ public class AnswerController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 错题集：目前答错的题（用于「重新刷错题」）。
+     * 按题库原顺序返回，重复作答时以最后一次记录为准（saveAnswer 是覆盖写）。
+     */
+    @GetMapping("/wrong")
+    public ResponseEntity<Map<String, Object>> getWrongQuestions() {
+        Map<Long, AnswerRecord> byQuestion = new HashMap<>();
+        for (AnswerRecord record : answerRecordService.getAllRecords()) {
+            byQuestion.put(record.getQuestionId(), record);
+        }
+        List<Question> allQuestions = questionService.getAllQuestions();
+
+        List<Map<String, Object>> wrong = new ArrayList<>();
+        List<Long> ids = new ArrayList<>();
+        for (Question question : allQuestions) {
+            AnswerRecord record = byQuestion.get(question.getId());
+            if (record == null || record.getIsCorrect() == null || record.getIsCorrect() == 1) {
+                continue;
+            }
+            ids.add(question.getId());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", question.getId());
+            item.put("questionType", question.getQuestionType());
+            item.put("content", abbreviate(question.getContent(), 60));
+            item.put("userAnswer", record.getUserAnswer());
+            item.put("correctAnswer", question.getCorrectAnswer());
+            wrong.add(item);
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("total", wrong.size());
+        response.put("ids", ids);
+        response.put("questions", wrong);
+        return ResponseEntity.ok(response);
+    }
+
+    private String abbreviate(String text, int max) {
+        if (text == null) {
+            return "";
+        }
+        String flat = text.replaceAll("\\s+", " ").trim();
+        return flat.length() <= max ? flat : flat.substring(0, max) + "...";
+    }
+
     @DeleteMapping("/clear")
     public ResponseEntity<Map<String, Object>> clearProgress() {
         answerRecordService.clearAll();

@@ -17,6 +17,19 @@
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
         .btn-danger { background: #dc3545; }
         .btn-danger:hover { background: #c82333; }
+        /* 错题重练模式 */
+        .btn-wrong { background: rgba(255,255,255,0.9); color: #c0392b; font-weight: bold; }
+        .btn-wrong:hover { background: #fff; }
+        .btn-wrong.active { background: #f39c12; color: #fff; }
+        .mode-banner { display: none; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 16px; border-radius: 12px; background: #fff7e6; border: 1px solid #ffe0a3; color: #a06a00; font-size: 14px; }
+        .mode-banner.show { display: flex; }
+        .mode-banner .mode-name { font-weight: bold; }
+        .mode-banner .mode-progress { margin-left: auto; color: #b8860b; }
+        .retry-btn { display: none; margin-top: 14px; padding: 9px 20px; border: none; border-radius: 20px; background: #667eea; color: #fff; cursor: pointer; font-size: 14px; font-family: inherit; }
+        .retry-btn.show { display: inline-block; }
+        .retry-btn:hover { background: #5a6fd8; }
+        .mastered-tip { display: none; margin-top: 12px; font-size: 14px; color: #155724; font-weight: bold; }
+        .mastered-tip.show { display: block; }
         .question-card { background: white; border-radius: 20px; padding: 35px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
         /* 答题卡入口（题号不再平铺，题量大时也不占版面） */
         .sheet-entry { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -148,8 +161,12 @@
                 <div class="progress">
                     已答：<span id="answered">0</span>
                 </div>
+                <div class="progress" id="wrongStatBox">
+                    错题：<span id="wrongTotal">0</span>
+                </div>
             </div>
             <div style="display: flex; gap: 10px;">
+                <button class="btn btn-wrong" id="wrongModeBtn" onclick="toggleWrongMode()">🔁 错题重练</button>
                 <a href="index.html" class="btn">🏠 返回</a>
                 <button class="btn btn-danger" onclick="clearProgress()">🗑️ 清除进度</button>
             </div>
@@ -162,6 +179,11 @@
 
         <div id="questionContainer" style="display: none;">
             <div class="question-card">
+                <div class="mode-banner" id="modeBanner">
+                    <span>🔁 错题重练中</span>
+                    <span class="mode-name" id="modeName">共 0 题</span>
+                    <span class="mode-progress" id="modeProgress">已重练 0 · 已答对 0</span>
+                </div>
                 <div class="sheet-entry">
                     <button class="sheet-btn" onclick="openSheet()">
                         📋 答题卡
@@ -214,6 +236,8 @@
                 <div class="feedback" id="feedback">
                     <div class="feedback-title" id="feedbackTitle"></div>
                     <div class="feedback-analysis" id="feedbackAnalysis"></div>
+                    <button class="retry-btn" id="retryBtn" onclick="retryCurrent()">↺ 再试一次</button>
+                    <div class="mastered-tip" id="masteredTip">✓ 已掌握，本题将从错题集移除</div>
                 </div>
 
                 <div class="button-group">
@@ -244,6 +268,8 @@
                         <div class="stat-label">错误</div>
                     </div>
                 </div>
+                <button class="btn btn-primary" id="backToAllBtn" onclick="exitWrongMode()"
+                        style="display:none; margin-right:10px;">← 返回全部题目</button>
                 <a href="index.html" class="btn btn-primary">🏠 返回首页</a>
             </div>
         </div>
@@ -285,13 +311,20 @@
         // 同源部署：页面与接口在同一个 Spring Boot 服务下，跟随实际主机/端口
         const API_BASE = '';
 
-        let questions = [];
+        let questions = [];        // 全量题库
+        let queue = [];            // 当前练习队列（全部题目 / 错题快照）
         let currentIndex = 0;
         let selectedAnswer = null;
         let selectedAnswers = new Set(); // 用于多选题存储多个选项
         let isAnswered = false;
-        let progress = {};
+        let progress = {};         // 全量答题记录：{questionId: {userAnswer, isCorrect}}
         let autoJumpTimer = null; // 自动跳转定时器
+
+        // 错题重练：mode='wrong' 时只在 queue（错题快照）里练，
+        // 本次作答单独记在 sessionRecords，不回显旧答案；答对即写回 progress（后端已覆盖）
+        let mode = 'all';          // all | wrong
+        let sessionRecords = {};   // 错题重练会话：{questionId: {userAnswer, isCorrect}}
+        let allIndexBackup = 0;    // 从全部模式进入错题模式时记住的位置
 
         // 答题卡状态：分页展示，避免几百个题号一次铺满页面
         const SHEET_PAGE_SIZE = 50;
@@ -306,10 +339,12 @@
                 fetch(`${API_BASE}/api/answers/progress`).then(res => res.json())
             ]).then(([questionData, progressData]) => {
                 questions = questionData;
+                queue = questions;             // 默认刷全部题目
                 progress = progressData.progress || {};
                 
-                document.getElementById('total').textContent = questions.length;
+                document.getElementById('total').textContent = queue.length;
                 document.getElementById('answered').textContent = progressData.answered || 0;
+                refreshWrongTotal();
                 
                 if (questions.length === 0) {
                     document.getElementById('loading').style.display = 'none';
@@ -322,6 +357,13 @@
                 updateSheetCounts();
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('questionContainer').style.display = 'block';
+
+                // 支持从首页直接进入错题重练：practice.html?mode=wrong
+                const params = new URLSearchParams(location.search);
+                if (params.get('mode') === 'wrong') {
+                    enterWrongMode();
+                    if (mode === 'wrong') return;
+                }
                 
                 let startIndex = 0;
                 for (let i = 0; i < questions.length; i++) {
@@ -338,9 +380,122 @@
             });
         }
 
+        // ============ 错题重练 ============
+        // 当前题目的作答记录：全部模式取服务端进度，错题模式取本次会话（不回显旧答案）
+        function recordOf(index) {
+            const question = queue[index];
+            if (!question) return null;
+            if (mode === 'wrong') return sessionRecords[question.id] || null;
+            return progress[question.id] || null;
+        }
+
+        function wrongCount() {
+            return questions.filter(q => {
+                const r = progress[q.id];
+                return r && r.isCorrect !== 1;
+            }).length;
+        }
+
+        function refreshWrongTotal() {
+            const n = wrongCount();
+            document.getElementById('wrongTotal').textContent = n;
+            const btn = document.getElementById('wrongModeBtn');
+            if (mode !== 'wrong') {
+                btn.textContent = n > 0 ? `🔁 错题重练 (${n})` : '🔁 错题重练';
+            }
+        }
+
+        function updateQueueHeader() {
+            const stats = computeStats();
+            document.getElementById('total').textContent = queue.length;
+            document.getElementById('answered').textContent = stats.answered;
+            if (mode === 'wrong') {
+                document.getElementById('modeName').textContent = `共 ${queue.length} 题`;
+                document.getElementById('modeProgress').textContent =
+                    `已重练 ${stats.answered} · 已答对 ${stats.correct}`;
+            }
+        }
+
+        function toggleWrongMode() {
+            if (mode === 'wrong') {
+                exitWrongMode();
+            } else {
+                enterWrongMode();
+            }
+        }
+
+        function enterWrongMode() {
+            const wrongList = questions.filter(q => {
+                const r = progress[q.id];
+                return r && r.isCorrect !== 1;
+            });
+            if (!wrongList.length) {
+                alert('暂时没有错题，继续刷题吧 👍');
+                if (mode === 'wrong') exitWrongMode();
+                return;
+            }
+            if (mode !== 'wrong') allIndexBackup = currentIndex;
+            mode = 'wrong';
+            queue = wrongList;
+            sessionRecords = {};
+            currentIndex = 0;
+            clearAutoJump();
+
+            document.getElementById('completion').style.display = 'none';
+            document.getElementById('questionContainer').style.display = 'block';
+            document.getElementById('modeBanner').classList.add('show');
+            document.getElementById('wrongModeBtn').textContent = '← 返回全部题目';
+            document.getElementById('wrongModeBtn').classList.add('active');
+            document.getElementById('wrongStatBox').style.display = 'none';
+            updateQueueHeader();
+            loadQuestion(0);
+            if (sheetOpen) renderSheet();
+        }
+
+        function exitWrongMode() {
+            mode = 'all';
+            queue = questions;
+            sessionRecords = {};
+            currentIndex = Math.max(0, Math.min(allIndexBackup, queue.length - 1));
+            clearAutoJump();
+
+            document.getElementById('modeBanner').classList.remove('show');
+            document.getElementById('wrongModeBtn').textContent = '🔁 错题重练';
+            document.getElementById('wrongModeBtn').classList.remove('active');
+            document.getElementById('wrongStatBox').style.display = '';
+            document.getElementById('completion').style.display = 'none';
+            document.getElementById('questionContainer').style.display = 'block';
+            refreshWrongTotal();
+            updateQueueHeader();
+            loadQuestion(currentIndex);
+            if (sheetOpen) renderSheet();
+        }
+
+        function clearAutoJump() {
+            if (autoJumpTimer) {
+                clearTimeout(autoJumpTimer);
+                autoJumpTimer = null;
+            }
+        }
+
+        // 队列是否已全部作答
+        function allAnsweredInQueue() {
+            return queue.length > 0 && queue.every(q => {
+                const r = mode === 'wrong' ? sessionRecords[q.id] : progress[q.id];
+                return !!r;
+            });
+        }
+
+        function firstUnansweredInQueue() {
+            return queue.findIndex(q => {
+                const r = mode === 'wrong' ? sessionRecords[q.id] : progress[q.id];
+                return !r;
+            });
+        }
+
         // ============ 答题卡 ============
         function statusOf(index) {
-            const record = progress[questions[index].id];
+            const record = recordOf(index);
             if (!record) return 'unanswered';
             return record.isCorrect === 1 ? 'correct' : 'wrong';
         }
@@ -348,30 +503,34 @@
         function computeStats() {
             let answered = 0;
             let wrong = 0;
-            questions.forEach(q => {
-                const record = progress[q.id];
+            queue.forEach(q => {
+                const record = mode === 'wrong' ? sessionRecords[q.id] : progress[q.id];
                 if (!record) return;
                 answered++;
                 if (record.isCorrect !== 1) wrong++;
             });
-            return { answered, wrong, correct: answered - wrong, unanswered: questions.length - answered };
+            return { answered, wrong, correct: answered - wrong, unanswered: queue.length - answered };
         }
 
         // 刷新计数（题量大时每次答题只需更新这几个文字，不动 DOM 列表）
         function updateSheetCounts() {
             const stats = computeStats();
-            document.getElementById('sheetCount').textContent = `${stats.answered}/${questions.length}`;
+            document.getElementById('sheetCount').textContent = `${stats.answered}/${queue.length}`;
             document.getElementById('sheetSub').textContent =
-                `共 ${questions.length} 题 · 已答 ${stats.answered} · 答对 ${stats.correct} · 错题 ${stats.wrong}`;
-            document.getElementById('tabAll').textContent = `全部 ${questions.length}`;
+                `共 ${queue.length} 题 · 已答 ${stats.answered} · 答对 ${stats.correct} · 错题 ${stats.wrong}`;
+            document.getElementById('tabAll').textContent = `全部 ${queue.length}`;
             document.getElementById('tabUnanswered').textContent = `未答 ${stats.unanswered}`;
             document.getElementById('tabWrong').textContent = `错题 ${stats.wrong}`;
             document.getElementById('answered').textContent = stats.answered;
+            if (mode === 'wrong') {
+                document.getElementById('modeProgress').textContent =
+                    `已重练 ${stats.answered} · 已答对 ${stats.correct}`;
+            }
         }
 
         function buildSheetList() {
             sheetList = [];
-            for (let i = 0; i < questions.length; i++) {
+            for (let i = 0; i < queue.length; i++) {
                 const status = statusOf(i);
                 if (sheetFilter === 'all'
                     || (sheetFilter === 'unanswered' && status === 'unanswered')
@@ -479,8 +638,8 @@
         function jumpTo() {
             const input = document.getElementById('jumpInput');
             const num = parseInt(input.value, 10);
-            if (!num || num < 1 || num > questions.length) {
-                alert(`请输入 1 - ${questions.length} 之间的题号`);
+            if (!num || num < 1 || num > queue.length) {
+                alert(`请输入 1 - ${queue.length} 之间的题号`);
                 input.select();
                 return;
             }
@@ -546,21 +705,18 @@
         }
 
         function loadQuestion(index) {
-            if (index < 0 || index >= questions.length) return;
+            if (index < 0 || index >= queue.length) return;
 
             // 清理定时器
-            if (autoJumpTimer) {
-                clearTimeout(autoJumpTimer);
-                autoJumpTimer = null;
-            }
+            clearAutoJump();
             
             currentIndex = index;
             selectedAnswer = null;
             selectedAnswers.clear();
             isAnswered = false;
 
-            const question = questions[index];
-            document.getElementById('questionNumber').textContent = `第 ${index + 1} / ${questions.length} 题`;
+            const question = queue[index];
+            document.getElementById('questionNumber').textContent = `第 ${index + 1} / ${queue.length} 题`;
             document.getElementById('current').textContent = index + 1;
             const content = question.content || '';
             const contentEl = document.getElementById('questionContent');
@@ -580,6 +736,8 @@
             document.getElementById('essayContainer').style.display = 'none';
             document.getElementById('confirmBtnContainer').style.display = 'none';
             document.getElementById('feedback').classList.remove('show');
+            document.getElementById('retryBtn').classList.remove('show');
+            document.getElementById('masteredTip').classList.remove('show');
 
             // 根据题型显示对应的输入控件
             const questionType = question.questionType;
@@ -610,13 +768,12 @@
                 document.getElementById('essayTextarea').value = '';
             }
             
-            // 检查是否已作答
-            if (progress[question.id]) {
-                const record = progress[question.id];
+            // 检查是否已作答（错题模式下只看本次会话，旧答案不回显，才能重新做）
+            const savedRecord = recordOf(index);
+            if (savedRecord) {
                 isAnswered = true;
-                selectedAnswer = record.userAnswer;
-                
-                showSavedAnswer(questionType, record);
+                selectedAnswer = savedRecord.userAnswer;
+                showSavedAnswer(questionType, savedRecord);
             }
 
             // 更新答题卡里的「当前题」标记：只改已渲染的那几个格子，不重建整张卡
@@ -643,7 +800,7 @@
                 if (questionType === 'multiple') {
                     // 多选题处理：显示用户选择的所有选项和正确选项
                     const userAnswerSet = new Set(letterSet(record.userAnswer));
-                    const correctAnswerSet = new Set(letterSet(questions[currentIndex].correctAnswer));
+                    const correctAnswerSet = new Set(letterSet(queue[currentIndex].correctAnswer));
                     
                     document.querySelectorAll('.option').forEach(opt => {
                         const answer = opt.dataset.answer;
@@ -665,7 +822,7 @@
                 } else {
                     // 单选题处理
                     const selectedOpt = findOption(record.userAnswer);
-                    const correctOpt = findOption(questions[currentIndex].correctAnswer);
+                    const correctOpt = findOption(queue[currentIndex].correctAnswer);
 
                     if (record.isCorrect === 1) {
                         if (selectedOpt) selectedOpt.classList.add('correct');
@@ -682,7 +839,7 @@
                 document.getElementById('essayTextarea').value = record.userAnswer;
             }
             
-            showFeedback(record.isCorrect === 1, questions[currentIndex].correctAnswer, questions[currentIndex].analysis);
+            showFeedback(record.isCorrect === 1, queue[currentIndex].correctAnswer, queue[currentIndex].analysis);
         }
 
         // 答案字母集合（容错：去空格、标点、忽略大小写）
@@ -713,7 +870,7 @@
         function selectOption(answer) {
             if (isAnswered) return;
 
-            const questionType = questions[currentIndex].questionType;
+            const questionType = queue[currentIndex].questionType;
             if (questionType === 'multiple') {
                 // 多选题：切换选中状态
                 const opt = document.querySelector(`.option[data-answer="${answer}"]`);
@@ -787,22 +944,25 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    questionId: questions[currentIndex].id,
+                    questionId: queue[currentIndex].id,
                     userAnswer: selectedAnswer
                 })
             })
             .then(res => res.json())
             .then(data => {
-                progress[questions[currentIndex].id] = {
-                    userAnswer: selectedAnswer,
-                    isCorrect: data.isCorrect ? 1 : 0
-                };
+                const qid = queue[currentIndex].id;
+                const record = { userAnswer: selectedAnswer, isCorrect: data.isCorrect ? 1 : 0 };
+                // 全量进度始终同步（后端已覆盖写），退出错题模式后状态才对
+                progress[qid] = record;
+                // 错题重练：本次作答单独记账，页面靠它决定是否已答
+                if (mode === 'wrong') sessionRecords[qid] = record;
                 
                 // 答题卡：只更新计数与状态，抽屉开着时才重绘当前页
                 updateSheetCounts();
                 if (sheetOpen) renderSheet();
 
                 showResult(data.isCorrect, data.correctAnswer, data.analysis);
+                refreshWrongTotal();
             })
             .catch(err => {
                 console.log('提交答案失败:', err);
@@ -810,7 +970,7 @@
         }
 
         function showResult(isCorrect, correctAnswer, analysis) {
-            const questionType = questions[currentIndex].questionType;
+            const questionType = queue[currentIndex].questionType;
             
             if (questionType === 'judge') {
                 document.querySelectorAll('.judge-option').forEach(opt => {
@@ -866,18 +1026,58 @@
             showFeedback(isCorrect, correctAnswer, analysis);
             updateNavButtons();
 
+            // 错题重练：答错可以当场再试，答对则提示已从错题集移除
+            if (mode === 'wrong') {
+                document.getElementById('retryBtn').classList.toggle('show', !isCorrect);
+                document.getElementById('masteredTip').classList.toggle('show', !!isCorrect);
+            }
+
             // 答对后自动跳下一题，加快刷题节奏；
-            // 但有解析的题目不跳，否则用户来不及看解析。
+            // 但有解析的题目不跳（来不及看解析）；错题重练也不跳（要看清「已掌握」提示）
             const hasAnalysis = !!(analysis && String(analysis).trim());
-            if (isCorrect && !hasAnalysis) {
+            if (isCorrect && !hasAnalysis && mode !== 'wrong') {
                 autoJumpTimer = setTimeout(() => {
-                    if (currentIndex === questions.length - 1 && Object.keys(progress).length === questions.length) {
-                        showCompletion();
-                    } else if (currentIndex < questions.length - 1) {
+                    if (currentIndex < queue.length - 1) {
                         loadQuestion(currentIndex + 1);
+                    } else if (allAnsweredInQueue()) {
+                        showCompletion();
+                    } else {
+                        const next = firstUnansweredInQueue();
+                        if (next >= 0) loadQuestion(next);
                     }
                 }, 1000);
             }
+        }
+
+        // 错题重练：答错后原地重做（清空本题会话记录与界面状态）
+        function retryCurrent() {
+            const question = queue[currentIndex];
+            if (!question) return;
+            delete sessionRecords[question.id];
+            isAnswered = false;
+            selectedAnswer = null;
+            selectedAnswers.clear();
+
+            document.querySelectorAll('.judge-option').forEach(opt => {
+                opt.classList.remove('selected', 'correct', 'wrong', 'disabled');
+            });
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.classList.remove('selected', 'correct', 'wrong', 'disabled');
+            });
+            const fillInput = document.getElementById('fillInput');
+            fillInput.value = '';
+            fillInput.classList.remove('correct', 'wrong');
+            const essayInput = document.getElementById('essayTextarea');
+            if (essayInput) essayInput.value = '';
+            document.getElementById('feedback').classList.remove('show');
+            document.getElementById('retryBtn').classList.remove('show');
+            document.getElementById('masteredTip').classList.remove('show');
+            document.getElementById('confirmBtnContainer').style.display =
+                question.questionType === 'multiple' ? 'block' : 'none';
+
+            updateSheetCounts();
+            if (sheetOpen) renderSheet();
+            updateNavButtons();
         }
 
         function showFeedback(isCorrect, correctAnswer, analysis) {
@@ -901,9 +1101,9 @@
             const nextBtn = document.getElementById('nextBtn');
             
             prevBtn.classList.toggle('show', currentIndex > 0);
-            nextBtn.classList.toggle('show', currentIndex < questions.length - 1 || isAnswered);
+            nextBtn.classList.toggle('show', currentIndex < queue.length - 1 || isAnswered);
             
-            if (currentIndex === questions.length - 1 && isAnswered) {
+            if (currentIndex === queue.length - 1 && isAnswered) {
                 nextBtn.textContent = '查看成绩';
             } else {
                 nextBtn.textContent = '下一题 →';
@@ -917,13 +1117,13 @@
         }
 
         function nextQuestion() {
-            if (currentIndex === questions.length - 1 && Object.keys(progress).length === questions.length) {
+            if (currentIndex === queue.length - 1 && allAnsweredInQueue()) {
                 showCompletion();
-            } else if (currentIndex < questions.length - 1) {
+            } else if (currentIndex < queue.length - 1) {
                 loadQuestion(currentIndex + 1);
             } else {
                 // 已是最后一题但还有未答题目：跳到第一道未答题，避免按钮点了没反应
-                const nextUnanswered = questions.findIndex(q => !progress[q.id]);
+                const nextUnanswered = firstUnansweredInQueue();
                 if (nextUnanswered >= 0) {
                     loadQuestion(nextUnanswered);
                 } else {
@@ -935,7 +1135,25 @@
         function showCompletion() {
             document.getElementById('questionContainer').style.display = 'none';
             document.getElementById('completion').style.display = 'block';
-            
+            document.getElementById('backToAllBtn').style.display = mode === 'wrong' ? 'inline-block' : 'none';
+
+            const titleEl = document.querySelector('.completion-title');
+            if (mode === 'wrong') {
+                // 错题重练结算：只统计本次会话
+                const records = queue.map(q => sessionRecords[q.id]).filter(Boolean);
+                const correctNum = records.filter(r => r.isCorrect === 1).length;
+                const wrongNum = records.length - correctNum;
+                document.getElementById('correctCount').textContent = correctNum;
+                document.getElementById('totalCount').textContent = queue.length;
+                document.getElementById('correctNum').textContent = correctNum;
+                document.getElementById('wrongNum').textContent = wrongNum;
+                document.getElementById('accuracy').textContent =
+                    (records.length ? Math.round((correctNum / records.length) * 100) : 0) + '%';
+                if (titleEl) titleEl.textContent = '错题重练完成！';
+                return;
+            }
+
+            if (titleEl) titleEl.textContent = '恭喜完成！';
             const correctNum = Object.values(progress).filter(r => r.isCorrect === 1).length;
             const answeredNum = Object.keys(progress).length;
             document.getElementById('correctCount').textContent = correctNum;
@@ -953,6 +1171,10 @@
                 fetch(`${API_BASE}/api/answers/clear`, { method: 'DELETE' })
                     .then(() => {
                         progress = {};
+                        sessionRecords = {};
+                        // 清空后错题集也空了，退出错题模式回到全部题目
+                        if (mode === 'wrong') exitWrongMode();
+                        refreshWrongTotal();
                         updateSheetCounts();
                         if (sheetOpen) renderSheet();
                         loadQuestion(0);
